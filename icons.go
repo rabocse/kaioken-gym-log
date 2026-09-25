@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"log"
+	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 )
@@ -90,6 +93,62 @@ func blend(a, b uint8, t float64) uint8 {
 	return uint8(float64(a) + (float64(b)-float64(a))*t)
 }
 
+func clampByte(v float64) uint8 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
+}
+
+// renderBackground draws the app's subtle background texture: a near-black
+// base with a few large, very faint colored glows, a soft vignette and a
+// light film grain. Deterministic (fixed seed) so regeneration is stable.
+// The texture is meant to stay barely visible under the per-theme scrim.
+func renderBackground() *image.RGBA {
+	const w, h = 1080, 2160
+	type glow struct {
+		x, y, r, cr, cg, cb float64 // position/radius normalized, color add at center
+	}
+	glows := []glow{
+		{0.22, 0.28, 0.42, 10, 34, 40}, // deep teal
+		{0.80, 0.62, 0.50, 30, 16, 44}, // violet
+		{0.55, 0.86, 0.38, 36, 22, 8},  // amber
+		{0.12, 0.80, 0.30, 12, 18, 38}, // blue
+	}
+	rng := rand.New(rand.NewSource(42))
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			px := (float64(x) + 0.5) / float64(w)
+			py := (float64(y) + 0.5) / float64(h)
+			r, g, b := 10.0, 13.0, 16.0
+			for _, gl := range glows {
+				dx, dy := px-gl.x, py-gl.y
+				f := math.Exp(-(dx*dx + dy*dy) / (gl.r * gl.r))
+				r += gl.cr * f
+				g += gl.cg * f
+				b += gl.cb * f
+			}
+			vx, vy := px-0.5, py-0.5
+			v := 1 - 0.9*(vx*vx+vy*vy)
+			r *= v
+			g *= v
+			b *= v
+			n := (rng.Float64() - 0.5) * 6
+			img.SetRGBA(x, y, color.RGBA{
+				R: clampByte(r + n),
+				G: clampByte(g + n),
+				B: clampByte(b + n),
+				A: 0xff,
+			})
+		}
+	}
+	return img
+}
+
 func iconsCmd(args []string) {
 	fset := flag.NewFlagSet("icons", flag.ExitOnError)
 	out := fset.String("out", "icons", "output directory")
@@ -121,4 +180,20 @@ func iconsCmd(args []string) {
 		}
 		fmt.Printf("wrote %s (%dx%d)\n", path, ic.size, ic.size)
 	}
+
+	if err := os.MkdirAll("img", 0o755); err != nil {
+		log.Fatal(err)
+	}
+	bgf, err := os.Create(filepath.Join("img", "background.jpg"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := jpeg.Encode(bgf, renderBackground(), &jpeg.Options{Quality: 82}); err != nil {
+		bgf.Close()
+		log.Fatal(err)
+	}
+	if err := bgf.Close(); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("wrote img/background.jpg")
 }

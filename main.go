@@ -17,7 +17,7 @@ import (
 	"strings"
 )
 
-//go:embed index.html manifest.webmanifest sw.js css js icons
+//go:embed index.html manifest.webmanifest sw.js css js icons img
 var webFiles embed.FS
 
 func main() {
@@ -40,7 +40,7 @@ func usage() {
 
 Usage:
   gymlog [serve] [-addr :8080]   serve the app locally (default command)
-  gymlog icons [-out icons]     regenerate the app icons
+  gymlog icons [-out icons]     regenerate the app icons and background
 `)
 }
 

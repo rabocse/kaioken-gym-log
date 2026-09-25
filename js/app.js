@@ -169,7 +169,7 @@
   let routines = [];
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark' };
+  const settings = { rest: 120, theme: 'dark', bg: false };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -191,6 +191,11 @@
     document.documentElement.dataset.theme = id;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', THEMES[id].meta);
+  }
+
+  function applyBg(on) {
+    settings.bg = !!on;
+    document.documentElement.dataset.bg = settings.bg ? 'on' : 'off';
   }
   const saveTimers = new Map();
   const collapsedMonths = new Set();
@@ -1318,6 +1323,15 @@
       '<p class="hint">Applies instantly. The home-screen icon and launch screen keep the default dark look.</p>' +
       '</div>' +
       '<div class="card">' +
+      '<div class="field"><span>Background image</span>' +
+      '<div class="seg seg-bg">' +
+      '<button type="button" class="' + (settings.bg ? '' : 'on') + '" data-b="off">Off</button>' +
+      '<button type="button" class="' + (settings.bg ? 'on' : '') + '" data-b="on">On</button>' +
+      '</div>' +
+      '</div>' +
+      '<p class="hint">A subtle generated texture behind the app, tinted by the current theme.</p>' +
+      '</div>' +
+      '<div class="card">' +
       '<label class="field"><span>Rest time between sets</span>' +
       '<div class="seg seg-rest">' +
       restOptions.map((o) =>
@@ -1348,6 +1362,17 @@
         applyTheme(id);
         $app.querySelectorAll('.theme-btn').forEach((x) => x.classList.toggle('on', x === b));
         store.setSetting('theme', id)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+      };
+    });
+
+    $app.querySelectorAll('.seg-bg button').forEach((b) => {
+      b.onclick = () => {
+        const on = b.dataset.b === 'on';
+        if (settings.bg === on) return;
+        applyBg(on);
+        $app.querySelectorAll('.seg-bg button').forEach((x) => x.classList.toggle('on', x === b));
+        store.setSetting('bg', on)
           .catch((e) => console.error('Kaioken: setting save failed', e));
       };
     });
@@ -1438,6 +1463,8 @@
     })
     .then(() => store.getSetting('theme', 'dark'))
     .then((t) => { applyTheme(THEMES[t] ? t : 'dark'); })
+    .then(() => store.getSetting('bg', false))
+    .then((bg) => { applyBg(bg === true); })
     .then(() => store.all())
     .then((rows) => { routines = rows || []; })
     .then(render)
