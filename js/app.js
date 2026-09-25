@@ -121,6 +121,50 @@
     copy: '<svg ' + A + '><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>',
   };
 
+  /* ---------- autocomplete suggestions ---------- */
+  const ROUTINE_NAMES = ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Lower Body', 'Full Body'];
+
+  function suggestMatches(q, names) {
+    const n = String(q || '').trim().toLowerCase();
+    if (!n) return [];
+    const starts = [];
+    const contains = [];
+    names.forEach((nm) => {
+      const ln = nm.toLowerCase();
+      if (ln === n) return;
+      if (ln.indexOf(n) === 0) starts.push(nm);
+      else if (ln.indexOf(n) !== -1) contains.push(nm);
+    });
+    return starts.concat(contains).slice(0, 6);
+  }
+
+  function updateSuggestions(box, input, names, onPick) {
+    if (!box) return;
+    const matches = suggestMatches(input.value, names);
+    box.innerHTML = matches.map((nm) =>
+      '<button class="sug" type="button" data-name="' + esc(nm) + '">' + esc(nm) + '</button>'
+    ).join('');
+    box.hidden = matches.length === 0;
+    box.querySelectorAll('.sug').forEach((b) => {
+      b.onclick = () => {
+        onPick(b.dataset.name);
+        box.hidden = true;
+      };
+    });
+  }
+
+  // iOS ignores <datalist>, so suggestions are rendered in the app instead:
+  // a list under the field while typing, tappable to fill.
+  function bindAutocomplete(input, box, names, onPick) {
+    if (!input || !box) return;
+    const refresh = () => updateSuggestions(box, input, names, onPick);
+    input.addEventListener('input', refresh);
+    input.addEventListener('focus', refresh);
+    input.addEventListener('blur', () => {
+      setTimeout(() => { box.hidden = true; }, 150);
+    });
+  }
+
   /* ---------- state ---------- */
   let routines = [];
   let view = { name: 'home' }; // home | new | routine | settings | stats
@@ -158,7 +202,7 @@
   function getRoutine(id) { return routines.find((r) => r.id === id); }
 
   function persist(r) {
-    store.put(r).catch((e) => console.error('GymLog: save failed', e));
+    store.put(r).catch((e) => console.error('Kaioken: save failed', e));
   }
 
   // Saves soon after typing stops, or immediately for structural changes.
@@ -263,6 +307,80 @@
     document.getElementById('rest-fill').style.width = (100 * left / restTotal) + '%';
   }
 
+  /* ---------- long-press action sheet ---------- */
+  function closeSheet() {
+    document.querySelectorAll('#sheet-backdrop, #sheet').forEach((n) => n.remove());
+  }
+
+  function openSheet(r) {
+    closeSheet();
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">' + esc(r.name) + '</div>' +
+      '<button class="btn btn-block" id="sheet-dup" type="button">' + I.copy + '<span>Repeat as New</span></button>' +
+      '<button class="btn btn-block sheet-danger" id="sheet-del" type="button">' + I.trash + '<span>Delete</span></button>' +
+      '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+    backdrop.onclick = closeSheet;
+    document.getElementById('sheet-cancel').onclick = closeSheet;
+    document.getElementById('sheet-dup').onclick = () => {
+      closeSheet();
+      const copy = duplicateRoutine(r);
+      routines.push(copy);
+      scheduleSave(copy, true);
+      toast('Duplicated for today');
+      go('routine', { id: copy.id });
+    };
+    document.getElementById('sheet-del').onclick = () => {
+      if (!confirm('Delete "' + r.name + '"? This cannot be undone.')) return;
+      closeSheet();
+      store.del(r.id).catch((e) => console.error('Kaioken:', e));
+      routines = routines.filter((x) => x.id !== r.id);
+      render();
+    };
+  }
+
+  // Touch-and-hold (500ms) or right-click opens the action sheet. The
+  // click that follows a long-press is suppressed so it does not navigate.
+  function attachLongPress(el, r) {
+    let timer = null;
+    let fired = false;
+    const clear = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+    };
+    el.addEventListener('touchstart', () => {
+      fired = false;
+      clear();
+      timer = setTimeout(() => {
+        fired = true;
+        el._suppressClick = true;
+        openSheet(r);
+      }, 500);
+    }, { passive: true });
+    el.addEventListener('touchmove', clear, { passive: true });
+    el.addEventListener('touchcancel', clear, { passive: true });
+    el.addEventListener('touchend', (e) => {
+      clear();
+      if (fired && e && e.preventDefault) e.preventDefault();
+    }, { passive: false });
+    el.addEventListener('contextmenu', (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      clear();
+      el._suppressClick = true;
+      openSheet(r);
+    });
+    const base = el.onclick;
+    el.onclick = (e) => {
+      if (el._suppressClick) { el._suppressClick = false; return; }
+      if (base) base(e);
+    };
+  }
+
   /* ---------- home ---------- */
   function installHint() {
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
@@ -270,7 +388,7 @@
     const standalone = matchMedia('(display-mode: standalone)').matches ||
       navigator.standalone === true;
     if (!isIOS || standalone) return '';
-    return '<div class="banner">Tip: to add GymLog to your Home Screen, tap <b>Share</b> in Safari, then <b>Add to Home Screen</b>.</div>';
+    return '<div class="banner">Tip: to add Kaioken to your Home Screen, tap <b>Share</b> in Safari, then <b>Add to Home Screen</b>.</div>';
   }
 
   function itemHTML(r, today) {
@@ -342,14 +460,15 @@
           '<span class="month-chev">' + I.chev + '</span>' +
           '</button>' +
           '<div class="month-items"' + (open ? '' : ' hidden') + '>' + items + '</div>';
-      }).join('');
+      }).join('') +
+        '<p class="hint">Hold a past workout (or right-click it) to repeat or delete it.</p>';
     } else {
       historyHTML = '<div class="section-label">History</div>' +
         '<div class="empty">No finished workouts yet. Create one and hit the gym.</div>';
     }
 
     $app.innerHTML =
-      '<header class="topbar"><h1>GymLog</h1>' +
+      '<header class="topbar"><h1>Kaioken</h1>' +
       '<button class="btn btn-icon" id="act-stats" aria-label="Volume charts">' + I.chart + '</button>' +
       '<button class="btn btn-icon" id="act-settings" aria-label="Settings">' + I.gear + '</button></header>' +
       installHint() +
@@ -372,6 +491,10 @@
     $app.querySelectorAll('.item').forEach((el) => {
       el.onclick = () => go('routine', { id: el.dataset.id });
     });
+    $app.querySelectorAll('.item.hist').forEach((el) => {
+      const r = getRoutine(el.dataset.id);
+      if (r) attachLongPress(el, r);
+    });
   }
 
   /* ---------- new routine ---------- */
@@ -382,7 +505,8 @@
       '<h1 class="topbar-title">New Routine</h1></header>' +
       '<div class="card">' +
       '<label class="field"><span>Name</span>' +
-      '<input id="in-name" list="name-list" placeholder="e.g. Push Day" maxlength="40" autocomplete="off" autocapitalize="words"></label>' +
+      '<input id="in-name" placeholder="e.g. Push Day" maxlength="40" autocomplete="off" autocapitalize="words">' +
+      '<div class="sug-box" id="name-sug" hidden></div></label>' +
       '<label class="field"><span>Date</span>' +
       '<input id="in-date" type="date" value="' + todayISO() + '"></label>' +
       '<p class="hint">Leave today\u2019s date to do it now, or pick a future date to schedule it.</p>' +
@@ -390,6 +514,12 @@
       '<button class="btn btn-primary btn-block" id="act-create" type="button">Create Routine</button>';
 
     document.getElementById('act-cancel').onclick = () => go('home');
+    bindAutocomplete(
+      document.getElementById('in-name'),
+      document.getElementById('name-sug'),
+      ROUTINE_NAMES,
+      (nm) => { document.getElementById('in-name').value = nm; }
+    );
     document.getElementById('act-create').onclick = () => {
       const name = document.getElementById('in-name').value.trim();
       let date = document.getElementById('in-date').value;
@@ -476,9 +606,10 @@
 
     return '<div class="card ex-card" data-eid="' + esc(ex.id) + '">' +
       '<div class="ex-head">' +
-      '<input class="ex-name" list="ex-list" placeholder="Exercise name" value="' + esc(ex.name) + '" maxlength="48" autocomplete="off" autocapitalize="words">' +
+      '<input class="ex-name" placeholder="Exercise name" value="' + esc(ex.name) + '" maxlength="48" autocomplete="off" autocapitalize="words">' +
       '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.trash + '</button>' +
       '</div>' +
+      '<div class="sug-box" hidden></div>' +
       '<div class="ex-controls">' +
       '<div class="seg" role="group" aria-label="Weight unit">' +
       '<button type="button" class="' + (ex.unit === 'kg' ? 'on' : '') + '" data-u="kg">kg</button>' +
@@ -561,8 +692,6 @@
       }
     } else if (r.status === 'active') {
       barHTML = '<button class="btn btn-primary btn-block btn-stop" id="act-finish" type="button">' + I.stop + '<span>Finish Workout</span></button>';
-    } else {
-      barHTML = '<button class="btn btn-primary btn-block btn-repeat" id="act-repeat" type="button">' + I.copy + '<span>Repeat as New</span></button>';
     }
     if (barHTML) {
       const bar = document.createElement('div');
@@ -608,15 +737,6 @@
       render();
     };
 
-    const repBtn = document.getElementById('act-repeat');
-    if (repBtn) repBtn.onclick = () => {
-      const copy = duplicateRoutine(r);
-      routines.push(copy);
-      scheduleSave(copy, true);
-      toast('Duplicated for today');
-      go('routine', { id: copy.id });
-    };
-
     const addEx = document.getElementById('act-add-ex');
     if (addEx) addEx.onclick = () => {
       r.exercises.push({
@@ -636,6 +756,13 @@
       if (!ex) return;
 
       const nameIn = card.querySelector('.ex-name');
+      bindAutocomplete(nameIn, card.querySelector('.sug-box'), GYMLOG_EX_NAMES, (nm) => {
+        ex.name = nm;
+        nameIn.value = nm;
+        const tag = card.querySelector('.cat-tag');
+        if (tag) tag.textContent = gymlogCategoryOf(nm);
+        scheduleSave(r, true);
+      });
       nameIn.addEventListener('input', () => {
         ex.name = nameIn.value;
         const tag = card.querySelector('.cat-tag');
@@ -1133,7 +1260,7 @@
       { secs: 120, label: '2 min' },
     ];
     const exportText = JSON.stringify(
-      { app: 'gymlog', version: 1, exportedAt: new Date().toISOString(), routines: routines },
+      { app: 'kaioken', version: 1, exportedAt: new Date().toISOString(), routines: routines },
       null, 2
     );
     $app.innerHTML =
@@ -1191,7 +1318,7 @@
         applyTheme(id);
         $app.querySelectorAll('.theme-btn').forEach((x) => x.classList.toggle('on', x === b));
         store.setSetting('theme', id)
-          .catch((e) => console.error('GymLog: setting save failed', e));
+          .catch((e) => console.error('Kaioken: setting save failed', e));
       };
     });
 
@@ -1200,7 +1327,7 @@
         settings.rest = Number(b.dataset.s);
         $app.querySelectorAll('.seg-rest button').forEach((x) => x.classList.toggle('on', x === b));
         store.setSetting('rest', settings.rest)
-          .catch((e) => console.error('GymLog: setting save failed', e));
+          .catch((e) => console.error('Kaioken: setting save failed', e));
       };
     });
 

@@ -1,4 +1,4 @@
-// GymLog exercise catalog: exercise name -> muscle group, plus chart colors.
+// Kaioken exercise catalog: exercise name -> muscle group, plus chart colors.
 // Categories are derived from the name at render time: nothing is stored in
 // the routine data, and catalog updates apply retroactively to all history.
 // Unknown/custom exercise names resolve to "Other".
@@ -96,6 +96,9 @@ const GYMLOG_EX_LOWER = {};
 Object.keys(GYMLOG_EX).forEach((k) => {
   GYMLOG_EX_LOWER[k.toLowerCase()] = GYMLOG_EX[k];
 });
+
+// All catalog exercise names, in catalog order, for autocomplete suggestions.
+const GYMLOG_EX_NAMES = Object.keys(GYMLOG_EX);
 
 function gymlogCategoryOf(name) {
   const n = String(name || '').trim().toLowerCase();

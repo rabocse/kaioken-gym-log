@@ -49,7 +49,7 @@ var (
 	iconFg = color.RGBA{R: 0x34, G: 0xd3, B: 0x99, A: 0xff} // #34d399
 )
 
-// renderIcon draws the GymLog icon at the given square size, using 4x4
+// renderIcon draws the Kaioken icon at the given square size, using 4x4
 // supersampling per pixel for smooth edges.
 func renderIcon(size int) *image.RGBA {
 	const ss = 4

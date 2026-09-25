@@ -1,4 +1,4 @@
-// Command gymlog is a local helper for the GymLog PWA:
+// Command gymlog is a local helper for the Kaioken app:
 //
 //	gymlog [serve]  serve the embedded app for local development (default)
 //	gymlog icons    regenerate the app icons
@@ -36,7 +36,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Print(`GymLog - minimalist gym routine tracker (PWA)
+	fmt.Print(`Kaioken - minimalist gym routine tracker (PWA)
 
 Usage:
   gymlog [serve] [-addr :8080]   serve the app locally (default command)
@@ -69,6 +69,6 @@ func serveCmd(args []string) {
 	} else {
 		url = "http://" + url
 	}
-	log.Printf("GymLog dev server listening on %s", url)
+	log.Printf("Kaioken dev server listening on %s", url)
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }

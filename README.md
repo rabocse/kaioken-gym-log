@@ -1,4 +1,4 @@
-# GymLog
+# Kaioken
 
 A minimalist gym routine tracker, as an installable Progressive Web App (PWA).
 No App Store, no account, no server — your data stays on your phone.
@@ -18,8 +18,10 @@ No App Store, no account, no server — your data stays on your phone.
   - Progression: per-exercise line chart of estimated 1RM (Epley), tap a point for its top set
   - Muscles: 12-week training volume heatmap by muscle group
   - Volume: weekly stacked volume bars by muscle group, tap a column for the breakdown
-- Repeat a completed routine as a new one (exercises, sets and weights copied, nothing marked done, scheduled for today)
+- Repeat or delete past workouts by holding them (or right-clicking): long-press action sheet
 - History of completed routines grouped by month (collapsible); past workouts are dimmed
+- Exercise and routine name autocomplete (in-app picker; iOS ignores <datalist>)
+- Named Kaioken — installs and displays as "Kaioken"
 - Works fully offline (service worker + on-device storage)
 - Backup / restore everything as JSON (in Settings)
 
@@ -48,7 +50,7 @@ Then, on the iPhone:
 
 1. Open the URL in Safari.
 2. Tap **Share → Add to Home Screen**.
-3. GymLog appears as an icon and opens full-screen like a native app. It
+3. Kaioken appears as an icon and opens full-screen like a native app. It
    works offline.
 
 ## How updates work

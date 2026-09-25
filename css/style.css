@@ -447,7 +447,12 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
-input[type="date"] { min-height: 48px; }
+input[type="date"] {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+}
 
 /* ---------- timer + summary ---------- */
 .timer-card { text-align: center; padding: 20px 16px; }
@@ -697,6 +702,72 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
   cursor: pointer;
 }
 .hcell.sel { outline: 1.5px solid var(--text); outline-offset: 1px; }
+
+/* ---------- autocomplete suggestions ---------- */
+.sug-box { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; }
+.sug-box[hidden] { display: none; }
+.sug {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  text-align: left;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.sug:active { background: var(--card); }
+.sug-box .sug:first-child { border-color: var(--accent-border); }
+
+/* ---------- long-press action sheet ---------- */
+#sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.55);
+  animation: fadein 0.15s ease;
+}
+#sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 31;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  animation: sheetup 0.18s ease;
+}
+.sheet-title {
+  text-align: center;
+  font-weight: 700;
+  font-size: 17px;
+  padding: 2px 0 8px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheet-danger { color: var(--danger); }
+@keyframes sheetup {
+  from { transform: translateY(48px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
 /* ---------- toast ---------- */
 #toast {

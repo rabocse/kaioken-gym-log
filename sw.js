@@ -1,11 +1,11 @@
-// GymLog service worker.
+// Kaioken service worker.
 //
 // Strategy: network-first. When online you always get the latest files
 // (code updates appear on the next reload); the cache is only used as an
 // offline fallback. The precache on install makes the app usable offline
 // from the first visit.
 
-const CACHE = 'gymlog-v10';
+const CACHE = 'gymlog-v11';
 const ASSETS = [
   './',
   './index.html',
