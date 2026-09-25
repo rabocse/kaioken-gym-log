@@ -308,12 +308,23 @@
   }
 
   /* ---------- long-press action sheet ---------- */
+  const SHEET_GUARD_MS = 300;
+
   function closeSheet() {
     document.querySelectorAll('#sheet-backdrop, #sheet').forEach((n) => n.remove());
   }
 
   function openSheet(r) {
     closeSheet();
+    const openedAt = Date.now();
+    // Ignore sheet input for a moment after opening: when the finger lifts
+    // from a long-press, iOS can still dispatch a stray click at the release
+    // point, which lands on the backdrop and would instantly close the sheet
+    // (or trigger a button).
+    const guard = (fn) => () => {
+      if (Date.now() - openedAt < SHEET_GUARD_MS) return;
+      fn();
+    };
     const backdrop = document.createElement('div');
     backdrop.id = 'sheet-backdrop';
     const sheet = document.createElement('div');
@@ -326,43 +337,55 @@
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
     document.body.appendChild(backdrop);
     document.body.appendChild(sheet);
-    backdrop.onclick = closeSheet;
-    document.getElementById('sheet-cancel').onclick = closeSheet;
-    document.getElementById('sheet-dup').onclick = () => {
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('sheet-cancel').onclick = guard(closeSheet);
+    document.getElementById('sheet-dup').onclick = guard(() => {
       closeSheet();
       const copy = duplicateRoutine(r);
       routines.push(copy);
       scheduleSave(copy, true);
       toast('Duplicated for today');
       go('routine', { id: copy.id });
-    };
-    document.getElementById('sheet-del').onclick = () => {
+    });
+    document.getElementById('sheet-del').onclick = guard(() => {
       if (!confirm('Delete "' + r.name + '"? This cannot be undone.')) return;
       closeSheet();
       store.del(r.id).catch((e) => console.error('Kaioken:', e));
       routines = routines.filter((x) => x.id !== r.id);
       render();
-    };
+    });
   }
 
-  // Touch-and-hold (500ms) or right-click opens the action sheet. The
-  // click that follows a long-press is suppressed so it does not navigate.
+  // Touch-and-hold (500ms) or right-click opens the action sheet. Small
+  // finger drift while holding is tolerated; a real move cancels. The click
+  // that follows a long-press is suppressed so it does not navigate.
   function attachLongPress(el, r) {
     let timer = null;
     let fired = false;
+    let sx = 0;
+    let sy = 0;
     const clear = () => {
       if (timer) { clearTimeout(timer); timer = null; }
     };
-    el.addEventListener('touchstart', () => {
+    el.addEventListener('touchstart', (e) => {
       fired = false;
+      el._suppressClick = false;
       clear();
+      const t = (e.touches && e.touches[0]) || {};
+      sx = t.clientX || 0;
+      sy = t.clientY || 0;
       timer = setTimeout(() => {
         fired = true;
         el._suppressClick = true;
         openSheet(r);
       }, 500);
     }, { passive: true });
-    el.addEventListener('touchmove', clear, { passive: true });
+    el.addEventListener('touchmove', (e) => {
+      const t = (e.touches && e.touches[0]) || {};
+      const dx = (t.clientX || sx) - sx;
+      const dy = (t.clientY || sy) - sy;
+      if (dx * dx + dy * dy > 144) clear();
+    }, { passive: true });
     el.addEventListener('touchcancel', clear, { passive: true });
     el.addEventListener('touchend', (e) => {
       clear();
@@ -370,6 +393,8 @@
     }, { passive: false });
     el.addEventListener('contextmenu', (e) => {
       if (e && e.preventDefault) e.preventDefault();
+      if (fired) return;
+      fired = true;
       clear();
       el._suppressClick = true;
       openSheet(r);

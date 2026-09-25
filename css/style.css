@@ -401,7 +401,7 @@ body.has-bar2.has-rest #app { padding-bottom: calc(256px + env(safe-area-inset-b
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* ---------- history: dimmed past items + collapsible months ---------- */
-.item.hist { opacity: 0.6; }
+.item.hist { opacity: 0.6; -webkit-touch-callout: none; }
 .item.hist:active { opacity: 1; }
 
 .month-head {
