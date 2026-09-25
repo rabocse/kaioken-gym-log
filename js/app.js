@@ -230,6 +230,7 @@
     document.querySelectorAll('#actionbar').forEach((n) => n.remove());
     document.body.classList.remove('has-bar');
     document.body.classList.remove('has-bar2');
+    closeSheet();
     switch (view.name) {
       case 'new': renderNew(); break;
       case 'routine': renderRoutine(); break;
@@ -308,21 +309,25 @@
   }
 
   /* ---------- long-press action sheet ---------- */
-  const SHEET_GUARD_MS = 300;
+  // The gesture that opens the sheet (touch-and-hold / right-click) can
+  // still emit a stray click when it ends - aimed at whatever is under the
+  // release point, i.e. the backdrop or even an option button. So the sheet
+  // ignores ALL input until a brand-new press (pointerdown/touchstart,
+  // captured at document level near the bottom of this file) begins. The
+  // stray release click has no new press before it, so it is always
+  // ignored, no matter how late it arrives; the next real tap works.
+  let sheetGestureLock = false;
 
   function closeSheet() {
+    sheetGestureLock = false;
     document.querySelectorAll('#sheet-backdrop, #sheet').forEach((n) => n.remove());
   }
 
   function openSheet(r) {
     closeSheet();
-    const openedAt = Date.now();
-    // Ignore sheet input for a moment after opening: when the finger lifts
-    // from a long-press, iOS can still dispatch a stray click at the release
-    // point, which lands on the backdrop and would instantly close the sheet
-    // (or trigger a button).
+    sheetGestureLock = true;
     const guard = (fn) => () => {
-      if (Date.now() - openedAt < SHEET_GUARD_MS) return;
+      if (sheetGestureLock) return;
       fn();
     };
     const backdrop = document.createElement('div');
@@ -1415,6 +1420,11 @@
   }
 
   /* ---------- init ---------- */
+  // A new press anywhere unlocks the action sheet: the gesture that opened
+  // it may still emit a stray click when it ends, which must be ignored.
+  document.addEventListener('pointerdown', () => { sheetGestureLock = false; }, true);
+  document.addEventListener('touchstart', () => { sheetGestureLock = false; }, true);
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
