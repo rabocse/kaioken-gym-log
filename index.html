@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>GymLog</title>
+  <meta name="description" content="Minimalist gym routine tracker.">
+  <meta name="theme-color" content="#0f1316">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GymLog">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app"></div>
+
+  <datalist id="name-list">
+    <option value="Push Day"></option>
+    <option value="Pull Day"></option>
+    <option value="Leg Day"></option>
+    <option value="Upper Body"></option>
+    <option value="Lower Body"></option>
+    <option value="Full Body"></option>
+  </datalist>
+
+  <datalist id="ex-list">
+    <option value="Bench Press"></option>
+    <option value="Incline Bench Press"></option>
+    <option value="Decline Bench Press"></option>
+    <option value="Dumbbell Bench Press"></option>
+    <option value="Incline Dumbbell Press"></option>
+    <option value="Machine Chest Press"></option>
+    <option value="Chest Fly"></option>
+    <option value="Cable Crossover"></option>
+    <option value="Push-Up"></option>
+    <option value="Dips"></option>
+    <option value="Deadlift"></option>
+    <option value="Romanian Deadlift"></option>
+    <option value="Rack Pull"></option>
+    <option value="Barbell Row"></option>
+    <option value="Pendlay Row"></option>
+    <option value="T-Bar Row"></option>
+    <option value="Seal Row"></option>
+    <option value="Dumbbell Row"></option>
+    <option value="Single-Arm Dumbbell Row"></option>
+    <option value="Cable Row"></option>
+    <option value="Lat Pulldown"></option>
+    <option value="Close-Grip Lat Pulldown"></option>
+    <option value="Straight-Arm Pulldown"></option>
+    <option value="Pull-Up"></option>
+    <option value="Chin-Up"></option>
+    <option value="Face Pull"></option>
+    <option value="Overhead Press"></option>
+    <option value="Push Press"></option>
+    <option value="Arnold Press"></option>
+    <option value="Seated Dumbbell Press"></option>
+    <option value="Machine Shoulder Press"></option>
+    <option value="Lateral Raise"></option>
+    <option value="Front Raise"></option>
+    <option value="Rear Delt Fly"></option>
+    <option value="Upright Row"></option>
+    <option value="Barbell Shrug"></option>
+    <option value="Dumbbell Shrug"></option>
+    <option value="Biceps Curl"></option>
+    <option value="EZ-Bar Curl"></option>
+    <option value="Hammer Curl"></option>
+    <option value="Preacher Curl"></option>
+    <option value="Incline Dumbbell Curl"></option>
+    <option value="Concentration Curl"></option>
+    <option value="Cable Curl"></option>
+    <option value="Reverse Curl"></option>
+    <option value="Wrist Curl"></option>
+    <option value="Triceps Extension"></option>
+    <option value="Overhead Triceps Extension"></option>
+    <option value="Triceps Pushdown"></option>
+    <option value="Skullcrusher"></option>
+    <option value="Close-Grip Bench Press"></option>
+    <option value="Power Clean"></option>
+    <option value="Hang Clean"></option>
+    <option value="Clean and Jerk"></option>
+    <option value="Snatch"></option>
+    <option value="Squat"></option>
+    <option value="Front Squat"></option>
+    <option value="Goblet Squat"></option>
+    <option value="Hack Squat"></option>
+    <option value="Bulgarian Split Squat"></option>
+    <option value="Leg Press"></option>
+    <option value="Leg Extension"></option>
+    <option value="Leg Curl"></option>
+    <option value="Nordic Curl"></option>
+    <option value="Stiff-Leg Deadlift"></option>
+    <option value="Good Morning"></option>
+    <option value="Hip Thrust"></option>
+    <option value="Glute Bridge"></option>
+    <option value="Step-Up"></option>
+    <option value="Lunge"></option>
+    <option value="Calf Raise"></option>
+    <option value="Seated Calf Raise"></option>
+    <option value="Plank"></option>
+    <option value="Side Plank"></option>
+    <option value="Hanging Leg Raise"></option>
+    <option value="Hanging Knee Raise"></option>
+    <option value="Cable Crunch"></option>
+    <option value="Crunch"></option>
+    <option value="Russian Twist"></option>
+    <option value="Ab Wheel Rollout"></option>
+    <option value="Farmer's Walk"></option>
+  </datalist>
+
+  <script src="js/catalog.js" defer></script>
+  <script src="js/app.js" defer></script>
+</body>
+</html>
