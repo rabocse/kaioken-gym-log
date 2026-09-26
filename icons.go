@@ -113,10 +113,10 @@ func renderBackground() *image.RGBA {
 		x, y, r, cr, cg, cb float64 // position/radius normalized, color add at center
 	}
 	glows := []glow{
-		{0.22, 0.28, 0.42, 10, 34, 40}, // deep teal
-		{0.80, 0.62, 0.50, 30, 16, 44}, // violet
-		{0.55, 0.86, 0.38, 36, 22, 8},  // amber
-		{0.12, 0.80, 0.30, 12, 18, 38}, // blue
+		{0.22, 0.28, 0.26, 24, 80, 100}, // deep teal
+		{0.80, 0.62, 0.30, 70, 40, 110}, // violet
+		{0.55, 0.86, 0.24, 95, 60, 20},  // amber
+		{0.12, 0.80, 0.20, 28, 45, 95},  // blue
 	}
 	rng := rand.New(rand.NewSource(42))
 	img := image.NewRGBA(image.Rect(0, 0, w, h))

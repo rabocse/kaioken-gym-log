@@ -3,7 +3,7 @@
   color-scheme: dark;
   --bg: #0f1316;
   --bg-rgb: 15, 19, 22;
-  --bg-scrim: 0.85;
+  --bg-scrim: 0.60;
   --card: #161c23;
   --card-rgb: 22, 28, 35;
   --card2: #1c242e;
@@ -30,7 +30,7 @@
   color-scheme: dark;
   --bg: #0c151f;
   --bg-rgb: 12, 21, 31;
-  --bg-scrim: 0.85;
+  --bg-scrim: 0.55;
   --card: #12202e;
   --card-rgb: 18, 32, 46;
   --card2: #182c3d;
@@ -57,7 +57,7 @@
   color-scheme: dark;
   --bg: #131120;
   --bg-rgb: 19, 17, 32;
-  --bg-scrim: 0.85;
+  --bg-scrim: 0.60;
   --card: #1a1a2b;
   --card-rgb: 26, 26, 43;
   --card2: #222236;
@@ -84,7 +84,7 @@
   color-scheme: dark;
   --bg: #17120d;
   --bg-rgb: 23, 18, 13;
-  --bg-scrim: 0.85;
+  --bg-scrim: 0.65;
   --card: #211a12;
   --card-rgb: 33, 26, 18;
   --card2: #2b2118;
@@ -111,7 +111,7 @@
   color-scheme: light;
   --bg: #f4f6f8;
   --bg-rgb: 244, 246, 248;
-  --bg-scrim: 0.93;
+  --bg-scrim: 0.60;
   --card: #ffffff;
   --card-rgb: 255, 255, 255;
   --card2: #eceff3;
@@ -138,7 +138,7 @@
   color-scheme: dark;
   --bg: #000000;
   --bg-rgb: 0, 0, 0;
-  --bg-scrim: 0.82;
+  --bg-scrim: 0.60;
   --card: #0d1113;
   --card-rgb: 13, 17, 19;
   --card2: #151a1d;
@@ -165,7 +165,7 @@
   color-scheme: dark;
   --bg: #0b0d0f;
   --bg-rgb: 11, 13, 15;
-  --bg-scrim: 0.85;
+  --bg-scrim: 0.60;
   --card: #121517;
   --card-rgb: 18, 21, 23;
   --card2: #191d20;
@@ -192,7 +192,7 @@
   color-scheme: dark;
   --bg: #242933;
   --bg-rgb: 36, 41, 51;
-  --bg-scrim: 0.87;
+  --bg-scrim: 0.60;
   --card: #2e3440;
   --card-rgb: 46, 52, 64;
   --card2: #3b4252;
@@ -219,7 +219,7 @@
   color-scheme: dark;
   --bg: #0e1510;
   --bg-rgb: 14, 21, 16;
-  --bg-scrim: 0.85;
+  --bg-scrim: 0.60;
   --card: #14201a;
   --card-rgb: 20, 32, 26;
   --card2: #1a2a22;
@@ -246,7 +246,7 @@
   color-scheme: dark;
   --bg: #151012;
   --bg-rgb: 21, 16, 18;
-  --bg-scrim: 0.85;
+  --bg-scrim: 0.90;
   --card: #1d1518;
   --card-rgb: 29, 21, 24;
   --card2: #261b1f;
@@ -273,7 +273,7 @@
   color-scheme: light;
   --bg: #f7f2ea;
   --bg-rgb: 247, 242, 234;
-  --bg-scrim: 0.93;
+  --bg-scrim: 0.90;
   --card: #fffdf8;
   --card-rgb: 255, 253, 248;
   --card2: #efe9df;
