@@ -114,6 +114,29 @@
   --radius: 14px;
 }
 
+:root[data-theme="kaioken"] {
+  color-scheme: dark;
+  --bg: #0f1316;
+  --card: #161c23;
+  --card2: #1c242e;
+  --border: #26303b;
+  --text: #e7ecf3;
+  --muted: #8d9aab;
+  --accent: #38bdf8;
+  --accent-ink: #08222f;
+  --accent-soft: rgba(56, 189, 248, 0.10);
+  --accent-border: rgba(56, 189, 248, 0.35);
+  --accent-text: #bae6fd;
+  --accent-area: rgba(56, 189, 248, 0.15);
+  --info-soft: rgba(96, 165, 250, 0.14);
+  --info-border: rgba(96, 165, 250, 0.4);
+  --info-text: #93c5fd;
+  --danger: #f87171;
+  --bar-bg: rgba(15, 19, 22, 0.93);
+  --toast-bg: #232b35;
+  --radius: 14px;
+}
+
 :root[data-theme="oled"] {
   color-scheme: dark;
   --bg: #000000;
@@ -397,6 +420,12 @@ body.has-bar2.has-rest #app { padding-bottom: calc(256px + env(safe-area-inset-b
   animation: pulse 1.6s infinite;
 }
 .chip-today { background: var(--info-soft); border-color: var(--info-border); color: var(--info-text); }
+.heat-chip {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+  white-space: nowrap;
+}
 .chip-done { background: var(--card2); border-color: var(--border); color: var(--muted); font-variant-numeric: tabular-nums; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 

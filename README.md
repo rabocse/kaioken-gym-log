@@ -13,6 +13,7 @@ No App Store, no account, no server — your data stays on your phone.
 - Tap a set to mark it done (green check + highlight); tap again to undo
 - Automatic rest countdown after each completed set (1 / 1.5 / 2 min, configurable in Settings)
 - Eleven color themes (dark, OLED, mono, nord, ocean, forest, violet, ember, ruby, light, paper), switchable in Settings
+- Kaioken theme: runs cold and heats up (Kaio-ken ×1–×20) with your last 7 days of training, with a live level chip on Home
 - Exercise categories auto-tagged from the built-in catalog (chest, back, legs, ...)
 - Stats screen, three tabs:
   - Progression: per-exercise line chart of estimated 1RM (Epley), tap a point for its top set

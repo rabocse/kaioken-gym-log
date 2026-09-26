@@ -173,6 +173,7 @@
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
+    kaioken: { label: 'Kaioken', bg: '#0f1316', card: '#161c23', accent: '#38bdf8', meta: '#0f1316' },
     oled: { label: 'OLED', bg: '#000000', card: '#0d1113', accent: '#34d399', meta: '#000000' },
     mono: { label: 'Mono', bg: '#0b0d0f', card: '#121517', accent: '#e8eaed', meta: '#0b0d0f' },
     nord: { label: 'Nord', bg: '#242933', card: '#2e3440', accent: '#88c0d0', meta: '#242933' },
@@ -191,6 +192,50 @@
     document.documentElement.dataset.theme = id;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', THEMES[id].meta);
+    syncHeat();
+  }
+
+  // Kaioken heat theme: the accent runs cold when you have not trained
+  // this week and heats up (Kaio-ken x1..x20) as you complete workouts.
+  // Derived from the routines data - nothing extra is stored.
+  const HEAT_LEVELS = [
+    { label: 'Kaio-ken \u00d71', accent: '#38bdf8', ink: '#08222f', soft: 'rgba(56, 189, 248, 0.12)', border: 'rgba(56, 189, 248, 0.4)', text: '#bae6fd', area: 'rgba(56, 189, 248, 0.16)' },
+    { label: 'Kaio-ken \u00d72', accent: '#2dd4bf', ink: '#04231f', soft: 'rgba(45, 212, 191, 0.12)', border: 'rgba(45, 212, 191, 0.4)', text: '#99f6e4', area: 'rgba(45, 212, 191, 0.16)' },
+    { label: 'Kaio-ken \u00d73', accent: '#fbbf24', ink: '#271a03', soft: 'rgba(251, 191, 36, 0.12)', border: 'rgba(251, 191, 36, 0.4)', text: '#fde68a', area: 'rgba(251, 191, 36, 0.16)' },
+    { label: 'Kaio-ken \u00d74', accent: '#fb923c', ink: '#2a1305', soft: 'rgba(251, 146, 60, 0.12)', border: 'rgba(251, 146, 60, 0.4)', text: '#fed7aa', area: 'rgba(251, 146, 60, 0.16)' },
+    { label: 'Kaio-ken \u00d720', accent: '#f87171', ink: '#2a0a0a', soft: 'rgba(248, 113, 113, 0.12)', border: 'rgba(248, 113, 113, 0.42)', text: '#fecaca', area: 'rgba(248, 113, 113, 0.16)' },
+  ];
+  const HEAT_VARS = ['--accent', '--accent-ink', '--accent-soft', '--accent-border', '--accent-text', '--accent-area'];
+
+  function computeHeat() {
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    let count = 0;
+    routines.forEach((r) => {
+      if (r.status === 'completed' && (r.endedAt || 0) >= weekAgo) count++;
+    });
+    return Math.min(4, count);
+  }
+
+  function applyHeatLevel(i) {
+    const lv = HEAT_LEVELS[i];
+    if (!lv) return;
+    const s = document.documentElement.style;
+    s.setProperty('--accent', lv.accent);
+    s.setProperty('--accent-ink', lv.ink);
+    s.setProperty('--accent-soft', lv.soft);
+    s.setProperty('--accent-border', lv.border);
+    s.setProperty('--accent-text', lv.text);
+    s.setProperty('--accent-area', lv.area);
+  }
+
+  function clearHeat() {
+    const s = document.documentElement.style;
+    HEAT_VARS.forEach((p) => s.removeProperty(p));
+  }
+
+  function syncHeat() {
+    if (settings.theme === 'kaioken') applyHeatLevel(computeHeat());
+    else clearHeat();
   }
   const saveTimers = new Map();
   const collapsedMonths = new Set();
@@ -231,6 +276,7 @@
     document.body.classList.remove('has-bar');
     document.body.classList.remove('has-bar2');
     closeSheet();
+    syncHeat();
     switch (view.name) {
       case 'new': renderNew(); break;
       case 'routine': renderRoutine(); break;
@@ -499,6 +545,9 @@
 
     $app.innerHTML =
       '<header class="topbar"><h1>Kaioken</h1>' +
+      (settings.theme === 'kaioken'
+        ? '<span class="chip heat-chip">' + HEAT_LEVELS[computeHeat()].label + '</span>'
+        : '') +
       '<button class="btn btn-icon" id="act-stats" aria-label="Volume charts">' + I.chart + '</button>' +
       '<button class="btn btn-icon" id="act-settings" aria-label="Settings">' + I.gear + '</button></header>' +
       installHint() +
@@ -1307,7 +1356,8 @@
           '<span class="swatches">' +
           '<span class="sw" style="background:' + t.bg + '"></span>' +
           '<span class="sw" style="background:' + t.card + '"></span>' +
-          '<span class="sw" style="background:' + t.accent + '"></span>' +
+          '<span class="sw" style="background:' +
+          (id === 'kaioken' ? HEAT_LEVELS[computeHeat()].accent : t.accent) + '"></span>' +
           '</span>' +
           '<span class="theme-name">' + t.label + '</span>' +
           '<span class="sw-check">' + I.check + '</span>' +
@@ -1315,7 +1365,7 @@
       }).join('') +
       '</div>' +
       '</div>' +
-      '<p class="hint">Applies instantly. The home-screen icon and launch screen keep the default dark look.</p>' +
+      '<p class="hint">Applies instantly. Kaioken runs cold and heats up (Kaio-ken \u00d71\u2013\u00d720) with your last 7 days of training.</p>' +
       '</div>' +
       '<div class="card">' +
       '<label class="field"><span>Rest time between sets</span>' +

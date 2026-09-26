@@ -5,7 +5,7 @@
 // offline fallback. The precache on install makes the app usable offline
 // from the first visit.
 
-const CACHE = 'gymlog-v13';
+const CACHE = 'gymlog-v16';
 const ASSETS = [
   './',
   './index.html',
