@@ -809,11 +809,16 @@
     const finBtn = document.getElementById('act-finish');
     if (finBtn) finBtn.onclick = () => {
       if (!confirm('Finish workout? Recorded duration: ' + fmtFull(Date.now() - r.startedAt) + '.')) return;
+      const heatBefore = computeHeat();
       stopRest();
       r.status = 'completed';
       r.endedAt = Date.now();
       scheduleSave(r, true);
       render();
+      const heatAfter = computeHeat();
+      if (heatAfter > heatBefore && settings.theme === 'kaioken') {
+        toast(HEAT_LEVELS[heatAfter].label + '!');
+      }
     };
 
     const addEx = document.getElementById('act-add-ex');
@@ -1365,7 +1370,7 @@
       }).join('') +
       '</div>' +
       '</div>' +
-      '<p class="hint">Applies instantly. Kaioken runs cold and heats up (Kaio-ken \u00d71\u2013\u00d720) with your last 7 days of training.</p>' +
+      '<p class="hint">Applies instantly. Kaioken counts finished workouts from your last 7 days: 0 = \u00d71 (ice), 1 = \u00d72, 2 = \u00d73, 3 = \u00d74, 4+ = \u00d720 (red). Delete a finished workout to watch it cool down.</p>' +
       '</div>' +
       '<div class="card">' +
       '<label class="field"><span>Rest time between sets</span>' +
