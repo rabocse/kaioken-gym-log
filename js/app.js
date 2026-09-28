@@ -57,9 +57,11 @@
     ? crypto.randomUUID()
     : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
+  // Locale-tolerant number parsing: accepts "22.5" and "22,5" (comma
+  // locales), so decimal weights typed on any keypad parse correctly.
   const numOrNull = (v) => {
     if (v === '' || v == null) return null;
-    const n = parseFloat(v);
+    const n = parseFloat(String(v).trim().replace(',', '.'));
     return Number.isFinite(n) ? n : null;
   };
 
@@ -748,7 +750,9 @@
         check +
         '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">' +
         '<span class="mult">\u00d7</span>' +
-        '<input class="in-weight" type="number" inputmode="decimal" min="0" step="0.25" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
+        // iOS hides the decimal key for type="number" in many locales;
+        // text + inputmode="decimal" always shows it.
+        '<input class="in-weight" type="text" inputmode="decimal" autocomplete="off" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
         '<span class="unit-tag">' + esc(ex.unit) + '</span>' +
         '<button class="btn btn-icon btn-del-set" type="button" aria-label="Remove set">' + I.x + '</button>' +
         '</div>';
@@ -947,6 +951,10 @@
         wtIn.addEventListener('input', () => {
           set.weight = numOrNull(wtIn.value);
           scheduleSave(r);
+        });
+        wtIn.addEventListener('blur', () => {
+          const n = numOrNull(wtIn.value);
+          wtIn.value = n == null ? '' : String(n);
         });
         row.querySelector('.btn-del-set').onclick = () => {
           ex.sets = ex.sets.filter((s) => s.id !== set.id);
