@@ -727,9 +727,9 @@
       const lines = ex.sets.map((s, j) =>
         '<div class="set-line' + (s.done ? ' done' : '') + '">' +
         (s.done ? '<span class="done-check">' + I.check + '</span>' : '<span class="set-idx">' + (j + 1) + '</span>') +
-        '<span>' + (s.reps == null ? '\u2013' : s.reps) + ' reps</span>' +
-        '<span class="mult">\u00d7</span>' +
         '<span>' + (s.weight == null ? '\u2013' : s.weight) + ' ' + esc(ex.unit) + '</span>' +
+        '<span class="mult">\u00d7</span>' +
+        '<span>' + (s.reps == null ? '\u2013' : s.reps) + ' reps</span>' +
         '</div>').join('');
       return '<div class="card ex-card">' +
         '<div class="ex-title">' + esc(ex.name || 'Exercise') +
@@ -750,12 +750,12 @@
       }
       return '<div class="set-row' + (s.done ? ' done' : '') + '" data-sid="' + esc(s.id) + '">' +
         check +
-        '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">' +
-        '<span class="mult">\u00d7</span>' +
         // iOS hides the decimal key for type="number" in many locales;
         // text + inputmode="decimal" always shows it.
         '<input class="in-weight" type="text" inputmode="decimal" autocomplete="off" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
         '<span class="unit-tag">' + esc(ex.unit) + '</span>' +
+        '<span class="mult">\u00d7</span>' +
+        '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">' +
         '<button class="btn btn-icon btn-del-set" type="button" aria-label="Remove set">' + I.x + '</button>' +
         '</div>';
     }).join('');
@@ -1157,7 +1157,7 @@
       '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
       progressionSVG(sessions, disps, unit) +
       '<div class="cell-detail">Est. 1RM <b>' + fmt1(disps[statsPointSel]) + ' ' + esc(unit) + '</b>' +
-      ' \u00b7 top set ' + sel.reps + ' \u00d7 ' + sel.weight + ' ' + esc(sel.unit) +
+      ' \u00b7 top set ' + sel.weight + ' ' + esc(sel.unit) + ' \u00d7 ' + sel.reps +
       ' \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>' +
       '</div>' +
       '<p class="hint">Estimated 1RM (Epley: weight \u00d7 (1 + reps/30)) of your best set per session. Tap a point to see its top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
@@ -1376,7 +1376,7 @@
       '<div class="section-label slim">Week of ' + fmtDay(sel.key) + ' \u2013 ' + fmtDay(isoKey(selEnd)) + '</div>' +
       (rows || '<div class="empty-inline">No volume this week.</div>') +
       '</div>' +
-      '<p class="hint">Volume = reps \u00d7 weight per set, completed routines only. Totals are normalized to kg for comparison (1 kg = 2.2046 lb); your logged entries are unchanged.</p>';
+      '<p class="hint">Volume = weight \u00d7 reps per set, completed routines only. Totals are normalized to kg for comparison (1 kg = 2.2046 lb); your logged entries are unchanged.</p>';
   }
 
   function bindVolume() {
