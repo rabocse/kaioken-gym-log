@@ -813,10 +813,11 @@
   // nothing extra is stored: rename to a cardio name and the rows switch.
   const isCardioEx = (ex) => gymlogCategoryOf(ex.name) === 'Cardio';
 
-  // Personal record: a done set whose estimated 1RM (Epley, normalized to
-  // kg) is the all-time best for that exercise name. Derived from the data
-  // like the category, so nothing is stored: the current best glows gold
-  // with a flame, superseded sets lose it again.
+  // Personal record: a set whose estimated 1RM (Epley, normalized to kg)
+  // beats every other set for that exercise name - your previous bests and
+  // the other sets in this routine alike. Derived from the data, so nothing
+  // is stored: the circle turns into a live flame the moment the typed
+  // values would beat your record, and superseded sets lose it again.
   function epleyKg(ex, s) {
     if (s.reps == null || s.weight == null || s.reps <= 0 || s.weight <= 0) return 0;
     const w = s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1);
@@ -838,18 +839,16 @@
     return best;
   }
 
-  const isRecordSet = (ex, s, best) => {
-    if (!s.done) return false;
+  const isRecordSet = (ex, s) => {
     const e = epleyKg(ex, s);
-    return e > 0 && e >= best - 1e-9;
+    return e > 0 && e > bestEpleyByName(ex.name, s) + 1e-9;
   };
 
   function exerciseCardHTML(ex, editable, active) {
     const cardio = isCardioEx(ex);
-    const best = bestEpleyByName(ex.name);
     if (!editable) {
       const lines = ex.sets.map((s, j) => {
-        const pr = isRecordSet(ex, s, best);
+        const pr = isRecordSet(ex, s);
         const lead = (pr
           ? '<span class="done-check">' + I.flame + '</span>'
           : (s.done
@@ -873,15 +872,16 @@
     }
 
     const rows = ex.sets.map((s, j) => {
-      const pr = isRecordSet(ex, s, best);
+      const pr = isRecordSet(ex, s);
       let check;
       if (active) {
         check = '<button class="set-check' + (s.done ? ' on' : '') + (pr ? ' pr' : '') +
           '" type="button" aria-label="' +
           (s.done ? 'Mark set as not done' : 'Mark set as done') + '">' +
-          (s.done ? (pr ? I.flame : I.check) : String(j + 1)) + '</button>';
+          (pr ? I.flame : (s.done ? I.check : String(j + 1))) + '</button>';
       } else {
-        check = '<span class="set-check off">' + (j + 1) + '</span>';
+        check = '<span class="set-check off' + (pr ? ' pr' : '') + '">' +
+          (pr ? I.flame : (j + 1)) + '</span>';
       }
       const fields = cardio
         ? '<input class="in-mins" type="text" inputmode="decimal" autocomplete="off" placeholder="min" value="' + (s.mins == null ? '' : s.mins) + '">' +
@@ -1258,6 +1258,27 @@
         };
       });
 
+      // Live PR indicator: re-evaluate every row of the card when one set's
+      // values change, so a would-be-record circle turns into a flame while
+      // typing - and loses it again as soon as it no longer beats the rest.
+      const applyCardPR = () => {
+        if (isCardioEx(ex)) return;
+        card.querySelectorAll('.set-row').forEach((rw) => {
+          const st = ex.sets.find((x) => x.id === rw.dataset.sid);
+          if (!st) return;
+          const pr = isRecordSet(ex, st);
+          const chk = rw.querySelector('.set-check');
+          if (chk) {
+            chk.classList.toggle('pr', pr);
+            if (pr) chk.innerHTML = I.flame;
+            else if (st.done) chk.innerHTML = I.check;
+            else chk.innerHTML = String(Array.prototype.indexOf.call(
+              card.querySelectorAll('.set-row'), rw) + 1);
+          }
+          rw.classList.toggle('pr', pr);
+        });
+      };
+
       card.querySelectorAll('.set-row').forEach((row) => {
         const set = ex.sets.find((s) => s.id === row.dataset.sid);
         if (!set) return;
@@ -1286,10 +1307,12 @@
           repsIn.addEventListener('input', () => {
             set.reps = numOrNull(repsIn.value);
             scheduleSave(r);
+            applyCardPR();
           });
           wtIn.addEventListener('input', () => {
             set.weight = numOrNull(wtIn.value);
             scheduleSave(r);
+            applyCardPR();
           });
           wtIn.addEventListener('blur', () => {
             const n = numOrNull(wtIn.value);

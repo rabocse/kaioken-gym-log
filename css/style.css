@@ -669,10 +669,11 @@ input[type="date"] {
 .set-check.off { cursor: default; opacity: 0.55; }
 
 /* personal records: gold highlight + flame, on the current best set */
-.set-row.pr { background: rgba(245, 158, 11, 0.15); }
+.set-row.done.pr { background: rgba(245, 158, 11, 0.15); }
 .set-row.pr input, .set-row.pr .mult, .set-row.pr .unit-tag { color: #fbbf24; }
 .set-check.pr { background: #f59e0b; border-color: #f59e0b; color: #2b1d04; }
 .set-check.pr svg { width: 17px; height: 17px; }
+.set-check.off.pr { opacity: 1; }
 
 .set-idx { color: var(--muted); font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
 .mult { color: var(--muted); text-align: center; }
