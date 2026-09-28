@@ -5,7 +5,7 @@
 
 const GYMLOG_CATS = [
   'Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Forearms',
-  'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Full Body', 'Other',
+  'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Full Body', 'Cardio', 'Other',
 ];
 
 const GYMLOG_EX = {
@@ -90,6 +90,20 @@ const GYMLOG_EX = {
   'Clean and Jerk': 'Full Body',
   'Snatch': 'Full Body',
   "Farmer's Walk": 'Full Body',
+  'Running': 'Cardio',
+  'Treadmill': 'Cardio',
+  'Jogging': 'Cardio',
+  'Cycling': 'Cardio',
+  'Stationary Bike': 'Cardio',
+  'Spin Bike': 'Cardio',
+  'Elliptical': 'Cardio',
+  'Stair Climber': 'Cardio',
+  'StairMaster': 'Cardio',
+  'Jump Rope': 'Cardio',
+  'Swimming': 'Cardio',
+  'Walking': 'Cardio',
+  'Hiking': 'Cardio',
+  'Rowing Machine': 'Cardio',
 };
 
 const GYMLOG_EX_LOWER = {};
@@ -118,5 +132,6 @@ const GYMLOG_CAT_COLORS = {
   Calves: '#e879f9',
   Core: '#a3e635',
   'Full Body': '#38bdf8',
+  Cardio: '#c084fc',
   Other: '#64748b',
 };

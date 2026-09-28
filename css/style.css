@@ -631,6 +631,7 @@ input[type="date"] {
   border-radius: 10px;
 }
 .set-row.done { background: var(--accent-soft); }
+.set-row.cardio { grid-template-columns: 32px minmax(0, 1fr) 26px minmax(0, 1fr) 30px 32px; }
 
 .set-check {
   width: 32px;

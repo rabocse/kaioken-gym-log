@@ -7,6 +7,7 @@ No App Store, no account, no server — your data stays on your phone.
 
 - Create a routine for today, or schedule it for a future date
 - Add exercises freely (with common-name autocomplete)
+- Cardio exercises from the catalog (Running, Treadmill, Cycling, ...) log minutes and distance (km or mi) instead of reps × weight
 - Per exercise: any number of sets, reps per set, weight per set
 - Weight unit (kg / lb) is chosen **per exercise** — mix freely within one routine
 - Start a workout to start the timer; finish it to record the duration

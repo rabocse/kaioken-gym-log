@@ -718,19 +718,31 @@
       '</b></div></div>';
   }
 
+  // Cardio exercises (by catalog name) log time and distance per entry
+  // instead of reps x weight. Derived from the name like the category, so
+  // nothing extra is stored: rename to a cardio name and the rows switch.
+  const isCardioEx = (ex) => gymlogCategoryOf(ex.name) === 'Cardio';
+
   function exerciseCardHTML(ex, editable, active) {
+    const cardio = isCardioEx(ex);
     if (!editable) {
-      const lines = ex.sets.map((s, j) =>
-        '<div class="set-line' + (s.done ? ' done' : '') + '">' +
-        (s.done ? '<span class="done-check">' + I.check + '</span>' : '<span class="set-idx">' + (j + 1) + '</span>') +
-        '<span>' + (s.reps == null ? '\u2013' : s.reps) + ' reps</span>' +
-        '<span class="mult">\u00d7</span>' +
-        '<span>' + (s.weight == null ? '\u2013' : s.weight) + ' ' + esc(ex.unit) + '</span>' +
-        '</div>').join('');
+      const lines = ex.sets.map((s, j) => {
+        const lead = (s.done
+          ? '<span class="done-check">' + I.check + '</span>'
+          : '<span class="set-idx">' + (j + 1) + '</span>');
+        const main = cardio
+          ? '<span>' + (s.mins == null ? '\u2013' : s.mins) + ' min</span>' +
+            '<span class="mult">\u00b7</span>' +
+            '<span>' + (s.dist == null ? '\u2013' : s.dist) + ' ' + esc(ex.dunit || 'km') + '</span>'
+          : '<span>' + (s.reps == null ? '\u2013' : s.reps) + ' reps</span>' +
+            '<span class="mult">\u00d7</span>' +
+            '<span>' + (s.weight == null ? '\u2013' : s.weight) + ' ' + esc(ex.unit) + '</span>';
+        return '<div class="set-line' + (s.done ? ' done' : '') + '">' + lead + main + '</div>';
+      }).join('');
       return '<div class="card ex-card">' +
         '<div class="ex-title">' + esc(ex.name || 'Exercise') +
         '<span class="cat-tag">' + esc(gymlogCategoryOf(ex.name)) + '</span>' +
-        '<span class="unit-tag">' + esc(ex.unit) + '</span></div>' +
+        '<span class="unit-tag">' + esc(cardio ? (ex.dunit || 'km') : ex.unit) + '</span></div>' +
         (lines || '<div class="empty-inline">No sets logged.</div>') +
         '</div>';
     }
@@ -744,27 +756,39 @@
       } else {
         check = '<span class="set-check off">' + (j + 1) + '</span>';
       }
-      return '<div class="set-row' + (s.done ? ' done' : '') + '" data-sid="' + esc(s.id) + '">' +
-        check +
-        '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">' +
-        '<span class="mult">\u00d7</span>' +
-        '<input class="in-weight" type="number" inputmode="decimal" min="0" step="0.25" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
-        '<span class="unit-tag">' + esc(ex.unit) + '</span>' +
+      const fields = cardio
+        ? '<input class="in-mins" type="text" inputmode="decimal" autocomplete="off" placeholder="min" value="' + (s.mins == null ? '' : s.mins) + '">' +
+          '<span class="unit-tag min-tag">min</span>' +
+          '<input class="in-dist" type="text" inputmode="decimal" autocomplete="off" placeholder="dist" value="' + (s.dist == null ? '' : s.dist) + '">' +
+          '<span class="unit-tag dunit-tag">' + esc(ex.dunit || 'km') + '</span>'
+        : '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">' +
+          '<span class="mult">\u00d7</span>' +
+          '<input class="in-weight" type="number" inputmode="decimal" min="0" step="0.25" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
+          '<span class="unit-tag">' + esc(ex.unit) + '</span>';
+      return '<div class="set-row' + (cardio ? ' cardio' : '') + (s.done ? ' done' : '') + '" data-sid="' + esc(s.id) + '">' +
+        check + fields +
         '<button class="btn btn-icon btn-del-set" type="button" aria-label="Remove set">' + I.x + '</button>' +
         '</div>';
     }).join('');
 
-    return '<div class="card ex-card" data-eid="' + esc(ex.id) + '">' +
+    const unitSeg = cardio
+      ? '<div class="seg" role="group" aria-label="Distance unit">' +
+        '<button type="button" class="' + (ex.dunit === 'mi' ? '' : 'on') + '" data-u="km">km</button>' +
+        '<button type="button" class="' + (ex.dunit === 'mi' ? 'on' : '') + '" data-u="mi">mi</button>' +
+        '</div>'
+      : '<div class="seg" role="group" aria-label="Weight unit">' +
+        '<button type="button" class="' + (ex.unit === 'kg' ? 'on' : '') + '" data-u="kg">kg</button>' +
+        '<button type="button" class="' + (ex.unit === 'lb' ? 'on' : '') + '" data-u="lb">lb</button>' +
+        '</div>';
+
+    return '<div class="card ex-card" data-eid="' + esc(ex.id) + '" data-cardio="' + (cardio ? '1' : '') + '">' +
       '<div class="ex-head">' +
       '<input class="ex-name" placeholder="Exercise name" value="' + esc(ex.name) + '" maxlength="48" autocomplete="off" autocapitalize="words">' +
       '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.trash + '</button>' +
       '</div>' +
       '<div class="sug-box" hidden></div>' +
       '<div class="ex-controls">' +
-      '<div class="seg" role="group" aria-label="Weight unit">' +
-      '<button type="button" class="' + (ex.unit === 'kg' ? 'on' : '') + '" data-u="kg">kg</button>' +
-      '<button type="button" class="' + (ex.unit === 'lb' ? 'on' : '') + '" data-u="lb">lb</button>' +
-      '</div>' +
+      unitSeg +
       '<span class="ex-meta">' +
       '<span class="cat-tag">' + esc(gymlogCategoryOf(ex.name)) + '</span>' +
       '<span class="muted-small">' + ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets') + '</span>' +
@@ -801,10 +825,13 @@
         id: uid(),
         name: ex.name,
         unit: ex.unit,
+        dunit: ex.dunit,
         sets: ex.sets.map((s) => ({
           id: uid(),
           reps: s.reps,
           weight: s.weight,
+          mins: s.mins,
+          dist: s.dist,
           done: false,
         })),
       })),
@@ -917,6 +944,8 @@
         const tag = card.querySelector('.cat-tag');
         if (tag) tag.textContent = gymlogCategoryOf(nm);
         scheduleSave(r, true);
+        // picking a cardio name must swap the row layout, not just the tag
+        if ((gymlogCategoryOf(nm) === 'Cardio') !== (card.dataset.cardio === '1')) render();
       });
       nameIn.addEventListener('input', () => {
         ex.name = nameIn.value;
@@ -924,13 +953,26 @@
         if (tag) tag.textContent = gymlogCategoryOf(ex.name);
         scheduleSave(r);
       });
+      nameIn.addEventListener('blur', () => {
+        // delayed so a tap on an autocomplete suggestion lands first
+        setTimeout(() => {
+          if (isCardioEx(ex) !== (card.dataset.cardio === '1')) render();
+        }, 150);
+      });
 
       card.querySelectorAll('.seg button').forEach((b) => {
         b.onclick = () => {
-          if (ex.unit === b.dataset.u) return;
-          ex.unit = b.dataset.u;
+          const cardioNow = isCardioEx(ex);
+          const cur = cardioNow ? (ex.dunit || 'km') : ex.unit;
+          if (cur === b.dataset.u) return;
+          if (cardioNow) ex.dunit = b.dataset.u;
+          else ex.unit = b.dataset.u;
           card.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b));
-          card.querySelectorAll('.unit-tag').forEach((t) => (t.textContent = ex.unit));
+          if (cardioNow) {
+            card.querySelectorAll('.dunit-tag').forEach((t) => (t.textContent = ex.dunit));
+          } else {
+            card.querySelectorAll('.unit-tag').forEach((t) => (t.textContent = ex.unit));
+          }
           scheduleSave(r, true);
         };
       });
@@ -938,16 +980,37 @@
       card.querySelectorAll('.set-row').forEach((row) => {
         const set = ex.sets.find((s) => s.id === row.dataset.sid);
         if (!set) return;
-        const repsIn = row.querySelector('.in-reps');
-        const wtIn = row.querySelector('.in-weight');
-        repsIn.addEventListener('input', () => {
-          set.reps = numOrNull(repsIn.value);
-          scheduleSave(r);
-        });
-        wtIn.addEventListener('input', () => {
-          set.weight = numOrNull(wtIn.value);
-          scheduleSave(r);
-        });
+        if (isCardioEx(ex)) {
+          const minsIn = row.querySelector('.in-mins');
+          const distIn = row.querySelector('.in-dist');
+          minsIn.addEventListener('input', () => {
+            set.mins = numOrNull(minsIn.value);
+            scheduleSave(r);
+          });
+          minsIn.addEventListener('blur', () => {
+            const n = numOrNull(minsIn.value);
+            minsIn.value = n == null ? '' : String(n);
+          });
+          distIn.addEventListener('input', () => {
+            set.dist = numOrNull(distIn.value);
+            scheduleSave(r);
+          });
+          distIn.addEventListener('blur', () => {
+            const n = numOrNull(distIn.value);
+            distIn.value = n == null ? '' : String(n);
+          });
+        } else {
+          const repsIn = row.querySelector('.in-reps');
+          const wtIn = row.querySelector('.in-weight');
+          repsIn.addEventListener('input', () => {
+            set.reps = numOrNull(repsIn.value);
+            scheduleSave(r);
+          });
+          wtIn.addEventListener('input', () => {
+            set.weight = numOrNull(wtIn.value);
+            scheduleSave(r);
+          });
+        }
         row.querySelector('.btn-del-set').onclick = () => {
           ex.sets = ex.sets.filter((s) => s.id !== set.id);
           scheduleSave(r, true);
@@ -979,12 +1042,15 @@
 
       card.querySelector('.btn-add-set').onclick = () => {
         const last = ex.sets[ex.sets.length - 1];
-        ex.sets.push({
-          id: uid(),
-          reps: last ? last.reps : null,
-          weight: last ? last.weight : null,
-          done: false,
-        });
+        const next = { id: uid(), done: false };
+        if (isCardioEx(ex)) {
+          next.mins = last ? last.mins : null;
+          next.dist = last ? last.dist : null;
+        } else {
+          next.reps = last ? last.reps : null;
+          next.weight = last ? last.weight : null;
+        }
+        ex.sets.push(next);
         scheduleSave(r, true);
         render();
       };
@@ -1397,11 +1463,14 @@
       e.id = (typeof e.id === 'string' && e.id) ? e.id : uid();
       e.name = typeof e.name === 'string' ? e.name.slice(0, 60) : '';
       e.unit = e.unit === 'lb' ? 'lb' : 'kg';
+      e.dunit = e.dunit === 'mi' ? 'mi' : 'km';
       e.sets = Array.isArray(e.sets) ? e.sets : [];
       e.sets.forEach((s) => {
         s.id = (typeof s.id === 'string' && s.id) ? s.id : uid();
         s.reps = toNum(s.reps);
         s.weight = toNum(s.weight);
+        s.mins = toNum(s.mins);
+        s.dist = toNum(s.dist);
         s.done = s.done === true;
       });
     });
