@@ -13,7 +13,7 @@ No App Store, no account, no server — your data stays on your phone.
 - Tap a set to mark it done (green check + highlight); tap again to undo
 - Automatic rest countdown after each completed set (1 / 1.5 / 2 min, configurable in Settings)
 - Eleven color themes (dark, OLED, mono, nord, ocean, forest, violet, ember, ruby, light, paper), switchable in Settings
-- Background styles (Settings): subtle generated texture, or one of your own photos (stored on-device, offline, theme-tinted), with frosted cards
+- Background styles (Settings): subtle generated texture, or one of your own photos (stored on-device, offline, theme-tinted, Fill or Fit), with frosted cards
 - Exercise categories auto-tagged from the built-in catalog (chest, back, legs, ...)
 - Stats screen, three tabs:
   - Progression: per-exercise line chart of estimated 1RM (Epley), tap a point for its top set

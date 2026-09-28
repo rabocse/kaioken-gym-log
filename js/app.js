@@ -169,7 +169,7 @@
   let routines = [];
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '' };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill' };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -257,6 +257,11 @@
     settings.bgStyle = v;
     document.documentElement.dataset.bg = v;
     if (autoPick && v === 'photo' && !settings.photo) pickPhoto();
+  }
+
+  function applyPhotoFit(v) {
+    settings.photoFit = v === 'fit' ? 'fit' : 'fill';
+    document.documentElement.dataset.photoFit = settings.photoFit;
   }
   const saveTimers = new Map();
   const collapsedMonths = new Set();
@@ -1355,6 +1360,10 @@
         '<div class="field"><span>Your photo</span>' +
         '<img class="photo-thumb" alt="Background photo preview" src="' + esc(settings.photo) + '">' +
         '</div>' +
+        '<div class="seg seg-fit">' +
+        '<button type="button" class="' + (settings.photoFit === 'fit' ? '' : 'on') + '" data-f="fill">Fill</button>' +
+        '<button type="button" class="' + (settings.photoFit === 'fit' ? 'on' : '') + '" data-f="fit">Fit</button>' +
+        '</div>' +
         '<div class="photo-actions">' +
         '<button class="btn btn-ghost btn-block" id="act-photo-choose" type="button">Choose Photo</button>' +
         '<button class="btn btn-ghost btn-block btn-photo-remove" id="act-photo-remove" type="button">Remove Photo</button>' +
@@ -1460,6 +1469,16 @@
     });
     const chooseBtn = document.getElementById('act-photo-choose');
     if (chooseBtn) chooseBtn.onclick = () => pickPhoto();
+    $app.querySelectorAll('.seg-fit button').forEach((b) => {
+      b.onclick = () => {
+        const v = b.dataset.f;
+        if (settings.photoFit === v) return;
+        applyPhotoFit(v);
+        $app.querySelectorAll('.seg-fit button').forEach((x) => x.classList.toggle('on', x === b));
+        store.setSetting('photoFit', v)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+      };
+    });
     const removeBtn = document.getElementById('act-photo-remove');
     if (removeBtn) removeBtn.onclick = () => {
       store.setSetting('photo', '')
@@ -1557,6 +1576,8 @@
     .then((t) => { applyTheme(THEMES[t] ? t : 'dark'); })
     .then(() => store.getSetting('photo', ''))
     .then((photo) => { applyPhoto(typeof photo === 'string' ? photo : ''); })
+    .then(() => store.getSetting('photoFit', 'fill'))
+    .then((pf) => { applyPhotoFit(pf === 'fit' ? 'fit' : 'fill'); })
     .then(() => store.getSetting('bgStyle', null))
     .then((v) => {
       if (BG_STYLES.indexOf(v) !== -1) return v;

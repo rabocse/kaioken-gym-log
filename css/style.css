@@ -339,6 +339,13 @@
   backdrop-filter: blur(14px);
 }
 
+/* Fit mode: show the whole photo, letterboxed in the theme-tinted bars */
+:root[data-bg="photo"][data-photo-fit="fit"] body::before {
+  background-size: contain;
+}
+
+.seg-fit { margin: 10px 0 2px; }
+
 .photo-thumb {
   display: block;
   width: 100%;
