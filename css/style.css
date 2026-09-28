@@ -605,6 +605,19 @@ input[type="date"] {
 .ex-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .muted-small { color: var(--muted); font-size: 13.5px; }
 
+/* drag-reorder: the hidden original marks the drop slot, the clone follows */
+.ex-card { -webkit-touch-callout: none; }
+.ex-card.drag-src { visibility: hidden; }
+.drag-ghost {
+  position: fixed;
+  z-index: 90;
+  margin: 0;
+  pointer-events: none;
+  opacity: 0.96;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  transform: scale(1.02);
+}
+
 .seg { display: inline-flex; overflow: hidden; background: var(--card2); border: 1px solid var(--border); border-radius: 10px; }
 .seg button {
   min-width: 52px;
