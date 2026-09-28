@@ -169,7 +169,7 @@
   let routines = [];
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: true, bwUnit: 'kg' };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg' };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -1719,8 +1719,8 @@
         .then((legacy) => (legacy === true ? 'texture' : 'off'));
     })
     .then((v) => { applyBgStyle(v); })
-    .then(() => store.getSetting('suppsLast', true))
-    .then((v) => { settings.suppsLast = v !== false; })
+    .then(() => store.getSetting('suppsLast', false))
+    .then((v) => { settings.suppsLast = v === true; })
     .then(() => store.getSetting('bwUnit', 'kg'))
     .then((u) => { settings.bwUnit = u === 'lb' ? 'lb' : 'kg'; })
     .then(() => store.all())
