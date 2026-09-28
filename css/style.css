@@ -587,6 +587,10 @@ input[type="date"] {
   min-width: 0;
   max-width: 100%;
   min-height: 48px;
+  /* iOS sizes date inputs by an intrinsic native width that can overflow
+     the card; plain appearance obeys width: 100% like any other input */
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* ---------- timer + summary ---------- */
