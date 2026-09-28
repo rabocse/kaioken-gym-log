@@ -477,6 +477,7 @@ body.has-bar2.has-rest #app { padding-bottom: calc(256px + env(safe-area-inset-b
   margin-bottom: 16px;
 }
 .hint { color: var(--muted); font-size: 14px; margin: 10px 0 0; line-height: 1.5; }
+.version-line { text-align: center; margin-top: 14px; }
 .empty { color: var(--muted); font-size: 15px; padding: 14px 4px; text-align: center; }
 .empty-inline { color: var(--muted); font-size: 14px; padding: 2px 0; }
 .spacer { height: 12px; }

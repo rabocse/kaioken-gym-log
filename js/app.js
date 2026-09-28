@@ -1,6 +1,8 @@
 (() => {
   'use strict';
 
+  const APP_VERSION = '1.1.0';
+
   /* ---------- local database (IndexedDB) ---------- */
   const DB_NAME = 'gymlog';
   const DB_VERSION = 2;
@@ -1497,7 +1499,8 @@
       '<label class="field"><span>Import (paste a backup)</span>' +
       '<textarea id="ta-import" rows="4" spellcheck="false" placeholder="Paste backup JSON here"></textarea></label>' +
       '<button class="btn btn-primary btn-block" id="act-import" type="button">Import</button>' +
-      '</div>';
+      '</div>' +
+      '<p class="hint version-line">Kaioken v' + APP_VERSION + '</p>';
 
     document.getElementById('act-back').onclick = () => go('home');
 

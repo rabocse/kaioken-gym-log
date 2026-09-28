@@ -2,6 +2,7 @@
   "name": "Kaioken",
   "short_name": "Kaioken",
   "description": "Minimalist gym routine tracker.",
+  "version": "1.1.0",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

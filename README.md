@@ -3,7 +3,7 @@
 A minimalist gym routine tracker, as an installable Progressive Web App (PWA).
 No App Store, no account, no server — your data stays on your phone.
 
-## Features (v1)
+## Features
 
 - Create a routine for today, or schedule it for a future date
 - Add exercises freely (with common-name autocomplete)
