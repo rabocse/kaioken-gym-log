@@ -792,6 +792,158 @@
     }
   }
 
+  // Reorder exercises: press-and-hold a card (~0.5s, same gesture as the
+  // history long-press), then drag it - a ghost follows the finger while the
+  // hidden original marks the drop slot. Release to drop and save. Presses
+  // that start on inputs/buttons never begin a drag, and a real move before
+  // the hold fires cancels it, so scrolling and editing still work.
+  let exDragActive = false;
+
+  function attachExDrag(card, r) {
+    const HOLD_MS = 500;
+    const DRIFT_SQ = 144; // 12px, same tolerance as the long-press sheet
+    const INTERACTIVE = 'input, button, textarea, select, .sug, .sug-box';
+    let holdTimer = null;
+    let dragging = false;
+    let pid = -1;
+    let sx = 0;
+    let sy = 0;
+    let grabDY = 0;
+    let ghost = null;
+
+    const stopHold = () => {
+      if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    };
+
+    const startDrag = (e) => {
+      dragging = true;
+      exDragActive = true;
+      document.body.classList.add('ex-dragging');
+      const rect = card.getBoundingClientRect();
+      grabDY = e.clientY - rect.top;
+      card.classList.add('drag-src');
+      ghost = card.cloneNode(true);
+      ghost.classList.add('drag-ghost');
+      ghost.style.width = rect.width + 'px';
+      ghost.style.left = rect.left + 'px';
+      ghost.style.top = (e.clientY - grabDY) + 'px';
+      // cloned inputs carry attributes, not live values - copy them over
+      const srcIns = card.querySelectorAll('input');
+      const ghoIns = ghost.querySelectorAll('input');
+      for (let i = 0; i < srcIns.length && i < ghoIns.length; i++) {
+        ghoIns[i].value = srcIns[i].value;
+      }
+      document.body.appendChild(ghost);
+      try { card.setPointerCapture(pid); } catch (err) {}
+    };
+
+    const moveDrag = (e) => {
+      if (!ghost) return;
+      ghost.style.top = (e.clientY - grabDY) + 'px';
+      const others = [];
+      $app.querySelectorAll('.ex-card[data-eid]').forEach((c) => {
+        if (c !== card) others.push(c);
+      });
+      let idx = 0;
+      for (let i = 0; i < others.length; i++) {
+        const rc = others[i].getBoundingClientRect();
+        if (e.clientY > rc.top + rc.height / 2) idx = i + 1;
+      }
+      const parent = card.parentNode;
+      if (idx < others.length) {
+        if (card.nextSibling !== others[idx]) parent.insertBefore(card, others[idx]);
+      } else {
+        const last = others[others.length - 1];
+        if (last && card.previousSibling !== last) parent.insertBefore(card, last.nextSibling);
+      }
+    };
+
+    const endDrag = () => {
+      dragging = false;
+      exDragActive = false;
+      document.body.classList.remove('ex-dragging');
+      stopHold();
+      docUnbind();
+      if (ghost) { ghost.remove(); ghost = null; }
+      card.classList.remove('drag-src');
+      try { card.releasePointerCapture(pid); } catch (err) {}
+      // rebuild the exercise order from the DOM and save
+      const order = [];
+      $app.querySelectorAll('.ex-card[data-eid]').forEach((c) => order.push(c.dataset.eid));
+      r.exercises = order
+        .map((id) => r.exercises.find((x) => x.id === id))
+        .filter(Boolean);
+      scheduleSave(r, true);
+      // the release can emit a stray click (e.g. a set toggle) - eat it,
+      // but only briefly so the next real tap still works
+      const kill = (ev) => {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        cleanupKill();
+      };
+      const cleanupKill = () => {
+        document.removeEventListener('click', kill, true);
+        clearTimeout(killT);
+      };
+      const killT = setTimeout(cleanupKill, 400);
+      document.addEventListener('click', kill, true);
+      render();
+    };
+
+    // The move/up/cancel listeners live on the document, bound only while a
+    // hold (or drag) is in flight, so releases outside the card are caught
+    // and nothing lingers after a render.
+    const docMove = (e) => {
+      if (e.pointerId !== pid) return;
+      if (dragging) { moveDrag(e); return; }
+      if (holdTimer == null) return;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      if (dx * dx + dy * dy > DRIFT_SQ) stopHold();
+    };
+    const docUp = (e) => {
+      if (e.pointerId !== pid) return;
+      stopHold();
+      docUnbind();
+      if (dragging) endDrag();
+    };
+    const docTouch = (e) => {
+      if (dragging) e.preventDefault();
+    };
+    const docBind = () => {
+      docUnbind();
+      document.addEventListener('pointermove', docMove);
+      document.addEventListener('pointerup', docUp);
+      document.addEventListener('pointercancel', docUp);
+      document.addEventListener('touchmove', docTouch, { passive: false });
+    };
+    const docUnbind = () => {
+      document.removeEventListener('pointermove', docMove);
+      document.removeEventListener('pointerup', docUp);
+      document.removeEventListener('pointercancel', docUp);
+      document.removeEventListener('touchmove', docTouch);
+    };
+
+    card.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || exDragActive) return;
+      if (e.target && e.target.closest && e.target.closest(INTERACTIVE)) return;
+      stopHold();
+      pid = e.pointerId;
+      sx = e.clientX;
+      sy = e.clientY;
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        startDrag(e);
+      }, HOLD_MS);
+      docBind();
+    });
+    card.addEventListener('contextmenu', (e) => {
+      if (dragging || holdTimer) {
+        if (e.preventDefault) e.preventDefault();
+      }
+    });
+  }
+
   // A fresh copy of a routine for the next session: same exercises, sets,
   // reps and weights, but nothing marked done and not yet started.
   function duplicateRoutine(r) {
@@ -834,6 +986,9 @@
       '<div class="section-label">Exercises</div>' +
       (exCards || '<div class="empty">No exercises yet. Add your first one below.</div>') +
       (editable ? '<button class="btn btn-ghost btn-block" id="act-add-ex" type="button">+ Add Exercise</button>' : '') +
+      (editable && r.exercises.length > 1
+        ? '<p class="hint">Hold an exercise and drag to put your exercises in order.</p>'
+        : '') +
       '<div class="spacer"></div>';
 
     let barHTML = '';
@@ -915,6 +1070,7 @@
     $app.querySelectorAll('.ex-card[data-eid]').forEach((card) => {
       const ex = r.exercises.find((e) => e.id === card.dataset.eid);
       if (!ex) return;
+      if (editable && r.exercises.length > 1) attachExDrag(card, r);
 
       const nameIn = card.querySelector('.ex-name');
       bindAutocomplete(nameIn, card.querySelector('.sug-box'), GYMLOG_EX_NAMES, (nm) => {
