@@ -169,7 +169,7 @@
   let routines = [];
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill' };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: true, bwUnit: 'kg' };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -478,6 +478,86 @@
     });
   }
 
+  // Finish check-in: before a workout is recorded as completed, a sheet
+  // asks for creatine/protein (yes/no switch, remembering the last answer)
+  // and today's body weight (optional; the kg/lb choice is remembered).
+  // Both are saved on the routine with the finish time.
+  function openFinishSheet(r) {
+    closeSheet();
+    sheetGestureLock = true;
+    const guard = (fn) => () => {
+      if (sheetGestureLock) return;
+      fn();
+    };
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">Finish workout?</div>' +
+      '<div class="fin-sub">Recorded duration ' + fmtFull(Date.now() - r.startedAt) + '</div>' +
+      '<div class="fin-row">' +
+      '<span>Creatine / protein today?</span>' +
+      '<label class="switch"><input type="checkbox" id="fin-supps"' +
+      (settings.suppsLast ? ' checked' : '') + '><span class="sw-track"></span></label>' +
+      '</div>' +
+      '<div class="fin-row">' +
+      '<span>Body weight</span>' +
+      '<span class="fin-bw">' +
+      '<input id="fin-bw" type="text" inputmode="decimal" autocomplete="off" placeholder="optional">' +
+      '<span class="seg seg-bw">' +
+      '<button type="button" class="' + (settings.bwUnit === 'lb' ? '' : 'on') + '" data-bw="kg">kg</button>' +
+      '<button type="button" class="' + (settings.bwUnit === 'lb' ? 'on' : '') + '" data-bw="lb">lb</button>' +
+      '</span>' +
+      '</span>' +
+      '</div>' +
+      '<button class="btn btn-primary btn-block" id="fin-ok" type="button">Finish Workout</button>' +
+      '<button class="btn btn-ghost btn-block" id="fin-cancel" type="button">Cancel</button>';
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+
+    let bwUnit = settings.bwUnit === 'lb' ? 'lb' : 'kg';
+    const bwIn = document.getElementById('fin-bw');
+    sheet.querySelectorAll('.seg-bw button').forEach((b) => {
+      b.onclick = guard(() => {
+        if (bwUnit === b.dataset.bw) return;
+        bwUnit = b.dataset.bw;
+        sheet.querySelectorAll('.seg-bw button').forEach((x) => x.classList.toggle('on', x === b));
+      });
+    });
+    bwIn.addEventListener('blur', () => {
+      const n = numOrNull(bwIn.value);
+      bwIn.value = n == null ? '' : String(n);
+    });
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('fin-cancel').onclick = guard(closeSheet);
+    document.getElementById('fin-ok').onclick = guard(() => {
+      const supps = document.getElementById('fin-supps').checked;
+      const bw = numOrNull(bwIn.value);
+      closeSheet();
+      settings.suppsLast = supps;
+      settings.bwUnit = bwUnit;
+      store.setSetting('suppsLast', supps)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+      store.setSetting('bwUnit', bwUnit)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+      const heatBefore = computeHeat();
+      stopRest();
+      r.status = 'completed';
+      r.endedAt = Date.now();
+      r.supps = supps;
+      r.bodyWeight = bw;
+      r.bwUnit = bwUnit;
+      scheduleSave(r, true);
+      render();
+      const heatAfter = computeHeat();
+      if (heatAfter > heatBefore && settings.theme === 'kaioken') {
+        toast(HEAT_LEVELS[heatAfter].label + '!');
+      }
+    });
+  }
+
   // Touch-and-hold (500ms) or right-click opens the action sheet. Small
   // finger drift while holding is tolerated; a real move cancels. The click
   // that follows a long-press is suppressed so it does not navigate.
@@ -715,7 +795,12 @@
       '<div class="sum-row"><span>Sets</span><b>' + sets + '</b></div>' +
       '<div class="sum-row"><span>Finished</span><b>' +
       new Date(r.endedAt || Date.now()).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) +
-      '</b></div></div>';
+      '</b></div>' +
+      '<div class="sum-row"><span>Creatine / protein</span><b>' +
+      (r.supps === true ? 'yes' : r.supps === false ? 'no' : '\u2013') + '</b></div>' +
+      '<div class="sum-row"><span>Body weight</span><b>' +
+      (r.bodyWeight == null ? '\u2013' : r.bodyWeight + ' ' + esc(r.bwUnit || 'kg')) + '</b></div>' +
+      '</div>';
   }
 
   function exerciseCardHTML(ex, editable, active) {
@@ -879,17 +964,8 @@
 
     const finBtn = document.getElementById('act-finish');
     if (finBtn) finBtn.onclick = () => {
-      if (!confirm('Finish workout? Recorded duration: ' + fmtFull(Date.now() - r.startedAt) + '.')) return;
-      const heatBefore = computeHeat();
       stopRest();
-      r.status = 'completed';
-      r.endedAt = Date.now();
-      scheduleSave(r, true);
-      render();
-      const heatAfter = computeHeat();
-      if (heatAfter > heatBefore && settings.theme === 'kaioken') {
-        toast(HEAT_LEVELS[heatAfter].label + '!');
-      }
+      openFinishSheet(r);
     };
 
     const addEx = document.getElementById('act-add-ex');
@@ -1392,6 +1468,9 @@
     r.createdAt = toNum(r.createdAt) || Date.now();
     r.startedAt = toNum(r.startedAt);
     r.endedAt = toNum(r.endedAt);
+    r.supps = r.supps === true ? true : r.supps === false ? false : null;
+    r.bodyWeight = toNum(r.bodyWeight);
+    r.bwUnit = r.bwUnit === 'lb' ? 'lb' : 'kg';
     r.exercises = Array.isArray(r.exercises) ? r.exercises : [];
     r.exercises.forEach((e) => {
       e.id = (typeof e.id === 'string' && e.id) ? e.id : uid();
@@ -1640,6 +1719,10 @@
         .then((legacy) => (legacy === true ? 'texture' : 'off'));
     })
     .then((v) => { applyBgStyle(v); })
+    .then(() => store.getSetting('suppsLast', true))
+    .then((v) => { settings.suppsLast = v !== false; })
+    .then(() => store.getSetting('bwUnit', 'kg'))
+    .then((u) => { settings.bwUnit = u === 'lb' ? 'lb' : 'kg'; })
     .then(() => store.all())
     .then((rows) => { routines = rows || []; })
     .then(render)
