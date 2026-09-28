@@ -6,14 +6,15 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
-## [1.1.0] - unreleased
+## [1.1.0] - 2026-09-28
 
 ### Added
 - Reorder exercises: hold an exercise card and drag it to a new position.
 - Cardio exercises from the catalog (Running, Treadmill, Cycling, ...) log
   minutes and distance (km or mi) instead of reps × weight.
 - Finish check-in: when finishing a routine, a sheet asks for creatine/protein
-  (yes/no switch) and your body weight; both are saved with the workout.
+  (yes/no switch, defaults to no, remembers your last answer) and your body
+  weight; both are saved with the workout.
 - App versioning: version shown in Settings, semver git tags, this changelog.
 
 ### Changed
