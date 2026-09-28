@@ -930,8 +930,10 @@
       document.body.classList.add('ex-dragging');
       const rect = card.getBoundingClientRect();
       grabDY = e.clientY - rect.top;
-      card.classList.add('drag-src');
+      // clone BEFORE the original gets drag-src, or the ghost inherits
+      // its visibility:hidden and the lifted card turns invisible
       ghost = card.cloneNode(true);
+      card.classList.add('drag-src');
       ghost.classList.add('drag-ghost');
       ghost.style.width = rect.width + 'px';
       ghost.style.left = rect.left + 'px';
