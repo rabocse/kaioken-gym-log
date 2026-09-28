@@ -169,7 +169,7 @@
   let routines = [];
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark' };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill' };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -236,6 +236,77 @@
   function syncHeat() {
     if (settings.theme === 'kaioken') applyHeatLevel(computeHeat());
     else clearHeat();
+  }
+
+  // Background styles: 'off' | 'texture' (generated jpg layer) | 'photo'
+  // (one of the user's own photos, downscaled and stored on-device).
+  // 'bg' (boolean) is the legacy setting from before styles existed.
+  const BG_STYLES = ['off', 'texture', 'photo'];
+
+  function applyPhoto(dataUrl) {
+    settings.photo = dataUrl || '';
+    const s = document.documentElement.style;
+    if (settings.photo) {
+      s.setProperty('--bg-photo', 'url("' + settings.photo + '")');
+    } else {
+      s.removeProperty('--bg-photo');
+    }
+  }
+
+  // Downscale with a canvas and store as a data URL, so the photo lives
+  // only on this device (IndexedDB) and works offline.
+  function loadPhotoFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1290;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        if (!dataUrl || dataUrl.length < 32) return;
+        store.setSetting('photo', dataUrl)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+        applyPhoto(dataUrl);
+        applyBgStyle('photo');
+        render();
+      };
+      img.onerror = () => {};
+      img.src = String(reader.result || '');
+    };
+    reader.onerror = () => {};
+    reader.readAsDataURL(file);
+  }
+
+  function pickPhoto() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      loadPhotoFile(file);
+    };
+    input.click();
+  }
+
+  function applyBgStyle(v, autoPick) {
+    if (BG_STYLES.indexOf(v) === -1) v = 'off';
+    settings.bgStyle = v;
+    document.documentElement.dataset.bg = v;
+    if (autoPick && v === 'photo' && !settings.photo) pickPhoto();
+  }
+
+  function applyPhotoFit(v) {
+    settings.photoFit = v === 'fit' ? 'fit' : 'fill';
+    document.documentElement.dataset.photoFit = settings.photoFit;
   }
   const saveTimers = new Map();
   const collapsedMonths = new Set();
@@ -1337,6 +1408,29 @@
     return r;
   }
 
+  function photoCardHTML() {
+    if (settings.photo) {
+      return '<div class="card">' +
+        '<div class="field"><span>Your photo</span>' +
+        '<img class="photo-thumb" alt="Background photo preview" src="' + esc(settings.photo) + '">' +
+        '</div>' +
+        '<div class="seg seg-fit">' +
+        '<button type="button" class="' + (settings.photoFit === 'fit' ? '' : 'on') + '" data-f="fill">Fill</button>' +
+        '<button type="button" class="' + (settings.photoFit === 'fit' ? 'on' : '') + '" data-f="fit">Fit</button>' +
+        '</div>' +
+        '<div class="photo-actions">' +
+        '<button class="btn btn-ghost btn-block" id="act-photo-choose" type="button">Choose Photo</button>' +
+        '<button class="btn btn-ghost btn-block btn-photo-remove" id="act-photo-remove" type="button">Remove Photo</button>' +
+        '</div>' +
+        '</div>';
+    }
+    return '<div class="card">' +
+      '<div class="field"><span>Your photo</span></div>' +
+      '<p class="hint">No photo chosen yet.</p>' +
+      '<button class="btn btn-primary btn-block" id="act-photo-choose" type="button">Choose Photo</button>' +
+      '</div>';
+  }
+
   function renderSettings() {
     const restOptions = [
       { secs: 60, label: '1 min' },
@@ -1373,6 +1467,17 @@
       '<p class="hint">Applies instantly. Kaioken counts finished workouts from your last 7 days: 0 = \u00d71 (ice), 1 = \u00d72, 2 = \u00d73, 3 = \u00d74, 4+ = \u00d720 (red). Delete a finished workout to watch it cool down.</p>' +
       '</div>' +
       '<div class="card">' +
+      '<div class="field"><span>Background style</span>' +
+      '<div class="seg seg-bg">' +
+      '<button type="button" class="' + (settings.bgStyle === 'off' ? 'on' : '') + '" data-b="off">Off</button>' +
+      '<button type="button" class="' + (settings.bgStyle === 'texture' ? 'on' : '') + '" data-b="texture">Texture</button>' +
+      '<button type="button" class="' + (settings.bgStyle === 'photo' ? 'on' : '') + '" data-b="photo">Photo</button>' +
+      '</div>' +
+      '</div>' +
+      '<p class="hint">Texture: a subtle generated backdrop. Photo: one of your own photos, stored only on this device.</p>' +
+      '</div>' +
+      (settings.bgStyle === 'photo' ? photoCardHTML() : '') +
+      '<div class="card">' +
       '<label class="field"><span>Rest time between sets</span>' +
       '<div class="seg seg-rest">' +
       restOptions.map((o) =>
@@ -1406,6 +1511,37 @@
           .catch((e) => console.error('Kaioken: setting save failed', e));
       };
     });
+
+    $app.querySelectorAll('.seg-bg button').forEach((b) => {
+      b.onclick = () => {
+        const v = b.dataset.b;
+        if (settings.bgStyle === v) return;
+        applyBgStyle(v, true);
+        store.setSetting('bgStyle', v)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+        render();
+      };
+    });
+    const chooseBtn = document.getElementById('act-photo-choose');
+    if (chooseBtn) chooseBtn.onclick = () => pickPhoto();
+    $app.querySelectorAll('.seg-fit button').forEach((b) => {
+      b.onclick = () => {
+        const v = b.dataset.f;
+        if (settings.photoFit === v) return;
+        applyPhotoFit(v);
+        $app.querySelectorAll('.seg-fit button').forEach((x) => x.classList.toggle('on', x === b));
+        store.setSetting('photoFit', v)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+      };
+    });
+    const removeBtn = document.getElementById('act-photo-remove');
+    if (removeBtn) removeBtn.onclick = () => {
+      store.setSetting('photo', '')
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+      applyPhoto('');
+      applyBgStyle('off');
+      render();
+    };
 
     $app.querySelectorAll('.seg-rest button').forEach((b) => {
       b.onclick = () => {
@@ -1493,6 +1629,17 @@
     })
     .then(() => store.getSetting('theme', 'dark'))
     .then((t) => { applyTheme(THEMES[t] ? t : 'dark'); })
+    .then(() => store.getSetting('photo', ''))
+    .then((photo) => { applyPhoto(typeof photo === 'string' ? photo : ''); })
+    .then(() => store.getSetting('photoFit', 'fill'))
+    .then((pf) => { applyPhotoFit(pf === 'fit' ? 'fit' : 'fill'); })
+    .then(() => store.getSetting('bgStyle', null))
+    .then((v) => {
+      if (BG_STYLES.indexOf(v) !== -1) return v;
+      return store.getSetting('bg', false)
+        .then((legacy) => (legacy === true ? 'texture' : 'off'));
+    })
+    .then((v) => { applyBgStyle(v); })
     .then(() => store.all())
     .then((rows) => { routines = rows || []; })
     .then(render)

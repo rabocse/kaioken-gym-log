@@ -2,8 +2,12 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0f1316;
+  --bg-rgb: 15, 19, 22;
+  --bg-scrim: 0.60;
   --card: #161c23;
+  --card-rgb: 22, 28, 35;
   --card2: #1c242e;
+  --card2-rgb: 28, 36, 46;
   --border: #26303b;
   --text: #e7ecf3;
   --muted: #8d9aab;
@@ -25,8 +29,12 @@
 :root[data-theme="ocean"] {
   color-scheme: dark;
   --bg: #0c151f;
+  --bg-rgb: 12, 21, 31;
+  --bg-scrim: 0.55;
   --card: #12202e;
+  --card-rgb: 18, 32, 46;
   --card2: #182c3d;
+  --card2-rgb: 24, 44, 61;
   --border: #274055;
   --text: #e3edf6;
   --muted: #8aa0b4;
@@ -48,8 +56,12 @@
 :root[data-theme="violet"] {
   color-scheme: dark;
   --bg: #131120;
+  --bg-rgb: 19, 17, 32;
+  --bg-scrim: 0.60;
   --card: #1a1a2b;
+  --card-rgb: 26, 26, 43;
   --card2: #222236;
+  --card2-rgb: 34, 34, 54;
   --border: #32324c;
   --text: #e9e7f5;
   --muted: #9795b5;
@@ -71,8 +83,12 @@
 :root[data-theme="ember"] {
   color-scheme: dark;
   --bg: #17120d;
+  --bg-rgb: 23, 18, 13;
+  --bg-scrim: 0.65;
   --card: #211a12;
+  --card-rgb: 33, 26, 18;
   --card2: #2b2118;
+  --card2-rgb: 43, 33, 24;
   --border: #3d2f22;
   --text: #f2ece3;
   --muted: #a6988a;
@@ -94,8 +110,12 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f4f6f8;
+  --bg-rgb: 244, 246, 248;
+  --bg-scrim: 0.60;
   --card: #ffffff;
+  --card-rgb: 255, 255, 255;
   --card2: #eceff3;
+  --card2-rgb: 236, 239, 243;
   --border: #d8dee5;
   --text: #1b222b;
   --muted: #68727e;
@@ -140,8 +160,12 @@
 :root[data-theme="oled"] {
   color-scheme: dark;
   --bg: #000000;
+  --bg-rgb: 0, 0, 0;
+  --bg-scrim: 0.60;
   --card: #0d1113;
+  --card-rgb: 13, 17, 19;
   --card2: #151a1d;
+  --card2-rgb: 21, 26, 29;
   --border: #232b30;
   --text: #e7ecf3;
   --muted: #8d9aab;
@@ -163,8 +187,12 @@
 :root[data-theme="mono"] {
   color-scheme: dark;
   --bg: #0b0d0f;
+  --bg-rgb: 11, 13, 15;
+  --bg-scrim: 0.60;
   --card: #121517;
+  --card-rgb: 18, 21, 23;
   --card2: #191d20;
+  --card2-rgb: 25, 29, 32;
   --border: #24292e;
   --text: #eceef1;
   --muted: #8a9096;
@@ -186,8 +214,12 @@
 :root[data-theme="nord"] {
   color-scheme: dark;
   --bg: #242933;
+  --bg-rgb: 36, 41, 51;
+  --bg-scrim: 0.60;
   --card: #2e3440;
+  --card-rgb: 46, 52, 64;
   --card2: #3b4252;
+  --card2-rgb: 59, 66, 82;
   --border: #4c566a;
   --text: #eceff4;
   --muted: #a3aec2;
@@ -209,8 +241,12 @@
 :root[data-theme="forest"] {
   color-scheme: dark;
   --bg: #0e1510;
+  --bg-rgb: 14, 21, 16;
+  --bg-scrim: 0.60;
   --card: #14201a;
+  --card-rgb: 20, 32, 26;
   --card2: #1a2a22;
+  --card2-rgb: 26, 42, 34;
   --border: #26382e;
   --text: #e7f0ea;
   --muted: #8ca698;
@@ -232,8 +268,12 @@
 :root[data-theme="ruby"] {
   color-scheme: dark;
   --bg: #151012;
+  --bg-rgb: 21, 16, 18;
+  --bg-scrim: 0.90;
   --card: #1d1518;
+  --card-rgb: 29, 21, 24;
   --card2: #261b1f;
+  --card2-rgb: 38, 27, 31;
   --border: #362830;
   --text: #f0e8ec;
   --muted: #a4909a;
@@ -255,8 +295,12 @@
 :root[data-theme="paper"] {
   color-scheme: light;
   --bg: #f7f2ea;
+  --bg-rgb: 247, 242, 234;
+  --bg-scrim: 0.90;
   --card: #fffdf8;
+  --card-rgb: 255, 253, 248;
   --card2: #efe9df;
+  --card2-rgb: 239, 233, 223;
   --border: #ddd4c5;
   --text: #24201a;
   --muted: #6f675a;
@@ -275,10 +319,71 @@
   --radius: 14px;
 }
 
+/* ---------- background styles: texture + photo ---------- */
+:root[data-bg="texture"] body,
+:root[data-bg="photo"] body { background: transparent; }
+
+:root[data-bg="texture"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(var(--bg-rgb), var(--bg-scrim)), rgba(var(--bg-rgb), var(--bg-scrim))),
+    url("../img/background.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+:root[data-bg="photo"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(var(--bg-rgb), calc(var(--bg-scrim) + 0.06)), rgba(var(--bg-rgb), calc(var(--bg-scrim) + 0.06))),
+    var(--bg-photo, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+:root[data-bg="texture"] .card,
+:root[data-bg="texture"] .item,
+:root[data-bg="texture"] .theme-btn,
+:root[data-bg="texture"] #sheet,
+:root[data-bg="photo"] .card,
+:root[data-bg="photo"] .item,
+:root[data-bg="photo"] .theme-btn,
+:root[data-bg="photo"] #sheet {
+  background: rgba(var(--card-rgb), 0.9);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+/* Fit mode: show the whole photo, letterboxed in the theme-tinted bars */
+:root[data-bg="photo"][data-photo-fit="fit"] body::before {
+  background-size: contain;
+}
+
+.seg-fit { margin: 10px 0 2px; }
+
+.photo-thumb {
+  display: block;
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card2);
+}
+.photo-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
 /* Light themes: keep a dark strip behind the iPhone status bar so its
    white text stays readable in the installed app. */
-:root[data-theme="light"] body::before,
-:root[data-theme="paper"] body::before {
+:root[data-theme="light"] body::after,
+:root[data-theme="paper"] body::after {
   content: "";
   position: fixed;
   top: 0;
