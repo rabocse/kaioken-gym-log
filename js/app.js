@@ -119,6 +119,7 @@
     play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>',
     stop: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
     check: '<svg ' + A + '><path d="M20 6L9 17l-5-5"/></svg>',
+    flame: '<svg ' + A + '><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',
     gear: '<svg ' + A + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     x: '<svg ' + A + '><path d="M6 6l12 12M18 6L6 18"/></svg>',
     chart: '<svg ' + A + '><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
@@ -812,13 +813,48 @@
   // nothing extra is stored: rename to a cardio name and the rows switch.
   const isCardioEx = (ex) => gymlogCategoryOf(ex.name) === 'Cardio';
 
+  // Personal record: a done set whose estimated 1RM (Epley, normalized to
+  // kg) is the all-time best for that exercise name. Derived from the data
+  // like the category, so nothing is stored: the current best glows gold
+  // with a flame, superseded sets lose it again.
+  function epleyKg(ex, s) {
+    if (s.reps == null || s.weight == null || s.reps <= 0 || s.weight <= 0) return 0;
+    const w = s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1);
+    return w * (1 + s.reps / 30);
+  }
+
+  function bestEpleyByName(name, excludeSet) {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key) return 0;
+    let best = 0;
+    routines.forEach((r) => r.exercises.forEach((ex) => {
+      if (String(ex.name || '').trim().toLowerCase() !== key) return;
+      ex.sets.forEach((s) => {
+        if (s === excludeSet) return;
+        const e = epleyKg(ex, s);
+        if (e > best) best = e;
+      });
+    }));
+    return best;
+  }
+
+  const isRecordSet = (ex, s, best) => {
+    if (!s.done) return false;
+    const e = epleyKg(ex, s);
+    return e > 0 && e >= best - 1e-9;
+  };
+
   function exerciseCardHTML(ex, editable, active) {
     const cardio = isCardioEx(ex);
+    const best = bestEpleyByName(ex.name);
     if (!editable) {
       const lines = ex.sets.map((s, j) => {
-        const lead = (s.done
-          ? '<span class="done-check">' + I.check + '</span>'
-          : '<span class="set-idx">' + (j + 1) + '</span>');
+        const pr = isRecordSet(ex, s, best);
+        const lead = (pr
+          ? '<span class="done-check">' + I.flame + '</span>'
+          : (s.done
+            ? '<span class="done-check">' + I.check + '</span>'
+            : '<span class="set-idx">' + (j + 1) + '</span>'));
         const body = cardio
           ? '<span>' + (s.mins == null ? '\u2013' : s.mins) + ' min</span>' +
             '<span class="mult">\u00b7</span>' +
@@ -826,7 +862,7 @@
           : '<span>' + (s.weight == null ? '\u2013' : s.weight) + ' ' + esc(ex.unit) + '</span>' +
             '<span class="mult">\u00d7</span>' +
             '<span>' + (s.reps == null ? '\u2013' : s.reps) + ' reps</span>';
-        return '<div class="set-line' + (s.done ? ' done' : '') + '">' + lead + body + '</div>';
+        return '<div class="set-line' + (s.done ? ' done' : '') + (pr ? ' pr' : '') + '">' + lead + body + '</div>';
       }).join('');
       return '<div class="card ex-card">' +
         '<div class="ex-title">' + esc(ex.name || 'Exercise') +
@@ -837,11 +873,13 @@
     }
 
     const rows = ex.sets.map((s, j) => {
+      const pr = isRecordSet(ex, s, best);
       let check;
       if (active) {
-        check = '<button class="set-check' + (s.done ? ' on' : '') + '" type="button" aria-label="' +
+        check = '<button class="set-check' + (s.done ? ' on' : '') + (pr ? ' pr' : '') +
+          '" type="button" aria-label="' +
           (s.done ? 'Mark set as not done' : 'Mark set as done') + '">' +
-          (s.done ? I.check : String(j + 1)) + '</button>';
+          (s.done ? (pr ? I.flame : I.check) : String(j + 1)) + '</button>';
       } else {
         check = '<span class="set-check off">' + (j + 1) + '</span>';
       }
@@ -856,7 +894,7 @@
           '<span class="unit-tag">' + esc(ex.unit) + '</span>' +
           '<span class="mult">\u00d7</span>' +
           '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">';
-      return '<div class="set-row' + (cardio ? ' cardio' : '') + (s.done ? ' done' : '') + '" data-sid="' + esc(s.id) + '">' +
+      return '<div class="set-row' + (cardio ? ' cardio' : '') + (s.done ? ' done' : '') + (pr ? ' pr' : '') + '" data-sid="' + esc(s.id) + '">' +
         check + fields +
         '<button class="btn btn-icon btn-del-set" type="button" aria-label="Remove set">' + I.x + '</button>' +
         '</div>';
@@ -890,13 +928,18 @@
       '</div>';
   }
   // Mark a set done / not done. Tapping a row toggles too, except on the
-  // inputs and the delete button.
-  function toggleSet(r, set) {
+  // inputs and the delete button. Marking a set done that beats your best
+  // estimated 1RM for that exercise toasts a new personal record.
+  function toggleSet(r, ex, set) {
     set.done = !set.done;
     scheduleSave(r, true);
     render();
     if (set.done && r.status === 'active') {
-      const anyLeft = r.exercises.some((e) => e.sets.some((s) => !s.done));
+      const e = epleyKg(ex, set);
+      if (e > 0 && e > bestEpleyByName(ex.name, set) + 1e-9) {
+        toast('New PR: ' + set.weight + ' ' + ex.unit + ' \u00d7 ' + set.reps);
+      }
+      const anyLeft = r.exercises.some((x) => x.sets.some((s) => !s.done));
       if (anyLeft) startRest();
     }
   }
@@ -1262,7 +1305,7 @@
           const checkBtn = row.querySelector('.set-check');
           if (checkBtn) checkBtn.onclick = (e) => {
             if (e && e.stopPropagation) e.stopPropagation();
-            toggleSet(r, set);
+            toggleSet(r, ex, set);
           };
           row.onclick = (e) => {
             if (e && e.target && e.target.closest && (
@@ -1270,7 +1313,7 @@
               e.target.closest('.btn-del-set') ||
               e.target.closest('.set-check')
             )) return;
-            toggleSet(r, set);
+            toggleSet(r, ex, set);
           };
         }
       });

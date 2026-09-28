@@ -13,6 +13,7 @@ No App Store, no account, no server — your data stays on your phone.
 - Weight unit (kg / lb) is chosen **per exercise** — mix freely within one routine
 - Start a workout to start the timer; finish it to record the duration
 - Tap a set to mark it done (green check + highlight); tap again to undo
+- Personal records: your best set per exercise (by estimated 1RM) glows gold with a flame; beating it toasts a new PR
 - Automatic rest countdown after each completed set (1 / 1.5 / 2 min, configurable in Settings)
 - On finishing a workout: a creatine/protein check-in (yes/no switch) and an optional body-weight entry, saved with the routine
 - Eleven color themes (dark, OLED, mono, nord, ocean, forest, violet, ember, ruby, light, paper), switchable in Settings

@@ -668,6 +668,12 @@ input[type="date"] {
 .set-check.on svg { width: 17px; height: 17px; }
 .set-check.off { cursor: default; opacity: 0.55; }
 
+/* personal records: gold highlight + flame, on the current best set */
+.set-row.pr { background: rgba(245, 158, 11, 0.15); }
+.set-row.pr input, .set-row.pr .mult, .set-row.pr .unit-tag { color: #fbbf24; }
+.set-check.pr { background: #f59e0b; border-color: #f59e0b; color: #2b1d04; }
+.set-check.pr svg { width: 17px; height: 17px; }
+
 .set-idx { color: var(--muted); font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
 .mult { color: var(--muted); text-align: center; }
 .unit-tag { min-width: 24px; color: var(--muted); font-size: 13px; text-align: right; }
@@ -699,6 +705,8 @@ input[type="date"] {
 .set-line.done { color: var(--accent-text); }
 .done-check { display: inline-flex; align-items: center; width: 18px; color: var(--accent); }
 .done-check svg { width: 15px; height: 15px; }
+.set-line.pr, .set-line.pr .mult { color: #fbbf24; }
+.set-line.pr .done-check { color: #f59e0b; }
 
 /* ---------- fixed action bar ---------- */
 #actionbar {
