@@ -610,9 +610,10 @@ input[type="date"] {
 .ex-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .muted-small { color: var(--muted); font-size: 13.5px; }
 
-/* workout focus: folded exercises hide their rows, chevron shows state */
+/* workout focus: folded exercises hide their rows, units and add button */
 .ex-card.folded .set-row,
-.ex-card.folded .btn-add-set { display: none; }
+.ex-card.folded .btn-add-set,
+.ex-card.folded .ex-controls .seg { display: none; }
 .btn-fold svg { transform: rotate(0deg); transition: transform 0.15s; }
 .ex-card:not(.folded) .btn-fold svg { transform: rotate(90deg); }
 

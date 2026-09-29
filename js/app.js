@@ -317,17 +317,11 @@
   const collapsedMonths = new Set();
 
   // Workout focus: in an active routine the exercises fold down to their
-  // headers so only the one you are performing stays open. View state only,
-  // never stored: the current exercise unfolds when the workout starts and
-  // advances automatically as you complete its sets.
+  // headers so only the one you are performing stays open. All start folded
+  // - unfold the one you are on; finishing its sets folds it and unfolds
+  // the next. View state only, never stored.
   let activeOpenEx = null;
   let lastFoldCtx = '';
-
-  function firstOpenExId(r) {
-    const withUndone = r.exercises.find((e) => e.sets.some((s) => !s.done));
-    const ex = withUndone || r.exercises[0];
-    return ex ? ex.id : null;
-  }
 
   function stopTimer() {
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
@@ -1161,13 +1155,13 @@
     if (!r) { view = { name: 'home' }; return renderHome(); }
     const editable = r.status !== 'completed';
     const activeView = r.status === 'active';
-    // (Re)pick the focused exercise when entering the routine or when the
-    // workout starts; afterwards the choice is the user's own.
+    // (Re)set the fold state when entering the routine or when the workout
+    // starts: all folded by default, the user unfolds what they perform.
     if (activeView) {
       const ctx = r.id + ':' + r.status;
       if (lastFoldCtx !== ctx) {
         lastFoldCtx = ctx;
-        activeOpenEx = firstOpenExId(r);
+        activeOpenEx = null;
       } else if (activeOpenEx && !r.exercises.some((e) => e.id === activeOpenEx)) {
         activeOpenEx = null;
       }
