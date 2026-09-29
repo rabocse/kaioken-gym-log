@@ -26,6 +26,7 @@ No App Store, no account, no server — your data stays on your phone.
   - Volume: weekly stacked volume bars by muscle group, tap a column for the breakdown
 - Repeat or delete past workouts by holding them (or right-clicking): long-press action sheet
 - History of completed routines grouped by month (collapsible); past workouts are dimmed
+- Home: a compact last-7-days calendar strip with a dot on each day you finished a workout (the same 7 days the Kaioken theme watches); tap it to unfold the full month
 - Exercise and routine name autocomplete (in-app picker; iOS ignores <datalist>)
 - Named Kaioken — installs and displays as "Kaioken"
 - Works fully offline (service worker + on-device storage)

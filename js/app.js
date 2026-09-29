@@ -663,6 +663,66 @@
       .toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   }
 
+  // Home calendar: a compact strip of the last 7 days - the same window the
+  // Kaioken theme watches - with a dot on each day a workout was finished.
+  // Tapping unfolds the full month. View state only, never stored.
+  let calOpen = false;
+
+  function workoutDays() {
+    const days = {};
+    completedRoutines().forEach((r) => {
+      const d = routineDate(r);
+      if (!d) return;
+      const k = isoKey(d);
+      days[k] = (days[k] || 0) + 1;
+    });
+    return days;
+  }
+
+  function weekStripHTML(days) {
+    const now = new Date();
+    const cells = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const k = isoKey(d);
+      cells.push(
+        '<div class="cal-cell' + (i === 0 ? ' today' : '') + (days[k] ? ' has' : '') + '">' +
+        '<div class="cal-wd">' + esc(d.toLocaleDateString(undefined, { weekday: 'narrow' })) + '</div>' +
+        '<div class="cal-num">' + d.getDate() + '</div>' +
+        '<div class="cal-dot"></div>' +
+        '</div>'
+      );
+    }
+    return '<div class="cal-strip">' + cells.join('') + '</div>';
+  }
+
+  function monthGridHTML(days) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const lead = (new Date(y, m, 1).getDay() + 6) % 7; // Monday-first
+    const dim = new Date(y, m + 1, 0).getDate();
+    const wdRow = [];
+    for (let i = 0; i < 7; i++) {
+      const wd = new Date(2024, 0, 1 + i); // 2024-01-01 was a Monday
+      wdRow.push('<div>' + esc(wd.toLocaleDateString(undefined, { weekday: 'narrow' })) + '</div>');
+    }
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push('<div class="cal-m-cell blank"></div>');
+    for (let d = 1; d <= dim; d++) {
+      const k = isoKey(new Date(y, m, d));
+      cells.push('<div class="cal-m-cell' + (days[k] ? ' has' : '') +
+        (d === now.getDate() ? ' today' : '') + '">' + d + '</div>');
+    }
+    return '<div class="cal-month">' +
+      '<div class="cal-month-head">' +
+      esc(now.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })) +
+      '</div>' +
+      '<div class="cal-wd-row">' + wdRow.join('') + '</div>' +
+      '<div class="cal-month-grid">' + cells.join('') + '</div>' +
+      '</div>';
+  }
+
   function renderHome() {
     const today = todayISO();
     const active = routines.filter((r) => r.status === 'active')
@@ -699,6 +759,13 @@
         '<div class="empty">No finished workouts yet. Create one and hit the gym.</div>';
     }
 
+    const calDays = workoutDays();
+    const calHTML = '<div id="cal-toggle" class="card cal-card' + (calOpen ? ' open' : '') + '">' +
+      weekStripHTML(calDays) +
+      '<span class="cal-chev">' + I.chev + '</span>' +
+      (calOpen ? monthGridHTML(calDays) : '') +
+      '</div>';
+
     $app.innerHTML =
       '<header class="topbar"><h1>Kaioken</h1>' +
       (settings.theme === 'kaioken'
@@ -707,11 +774,16 @@
       '<button class="btn btn-icon" id="act-stats" aria-label="Volume charts">' + I.chart + '</button>' +
       '<button class="btn btn-icon" id="act-settings" aria-label="Settings">' + I.gear + '</button></header>' +
       installHint() +
+      calHTML +
       '<button class="btn btn-primary btn-block btn-new" id="act-new">' + I.plus + '<span>New Routine</span></button>' +
       sectionHTML('Active', active.map((r) => itemHTML(r, today)), '') +
       sectionHTML('Scheduled', scheduled.map((r) => itemHTML(r, today)), '') +
       historyHTML;
 
+    document.getElementById('cal-toggle').onclick = () => {
+      calOpen = !calOpen;
+      render();
+    };
     document.getElementById('act-new').onclick = () => go('new');
     document.getElementById('act-stats').onclick = () => { statsSelKey = null; go('stats'); };
     document.getElementById('act-settings').onclick = () => go('settings');

@@ -465,6 +465,58 @@ body.has-bar2.has-rest #app { padding-bottom: calc(256px + env(safe-area-inset-b
 .btn-block { display: flex; width: 100%; }
 .btn-new { font-size: 17px; margin-bottom: 4px; }
 
+/* ---------- home calendar ---------- */
+.cal-card {
+  position: relative;
+  padding: 10px 10px 8px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cal-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 0 6px;
+  border-radius: 9px;
+}
+.cal-cell.today { background: var(--accent-soft); }
+.cal-wd { font-size: 10.5px; color: var(--muted); text-transform: uppercase; }
+.cal-num { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cal-dot { width: 5px; height: 5px; border-radius: 50%; }
+.cal-cell.has .cal-dot { background: var(--accent); }
+.cal-chev { position: absolute; top: 10px; right: 10px; color: var(--muted); display: inline-flex; }
+.cal-chev svg { width: 15px; height: 15px; transition: transform 0.15s; }
+.cal-card.open .cal-chev svg { transform: rotate(90deg); }
+.cal-month { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+.cal-month-head { text-align: center; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.cal-wd-row { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 2px; }
+.cal-wd-row div { text-align: center; font-size: 10.5px; color: var(--muted); text-transform: uppercase; }
+.cal-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-m-cell {
+  position: relative;
+  text-align: center;
+  padding: 7px 0 9px;
+  font-size: 13.5px;
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.cal-m-cell.today { background: var(--accent-soft); font-weight: 700; }
+.cal-m-cell.has { color: var(--accent); font-weight: 700; }
+.cal-m-cell.has::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 /* ---------- misc text ---------- */
 .banner {
   background: var(--accent-soft);
