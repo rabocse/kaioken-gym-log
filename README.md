@@ -12,6 +12,7 @@ No App Store, no account, no server — your data stays on your phone.
 - Per exercise: any number of sets, reps per set, weight per set
 - Weight unit (kg / lb) is chosen **per exercise** — mix freely within one routine
 - Start a workout to start the timer; finish it to record the duration
+- During a workout: exercises fold to slim headers so you focus on one; all start folded - unfold the one you are on, and finishing its sets folds it and unfolds the next
 - Tap a set to mark it done (green check + highlight); tap again to undo
 - Personal records: the set circle turns into a golden flame the moment its typed values would beat your best (estimated 1RM); marking it done toasts a new PR and keeps the golden highlight
 - Automatic rest countdown after each completed set (1 / 1.5 / 2 min, configurable in Settings)
