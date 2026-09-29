@@ -491,7 +491,23 @@ body.has-bar2.has-rest #app { padding-bottom: calc(256px + env(safe-area-inset-b
 .cal-chev svg { width: 15px; height: 15px; transition: transform 0.15s; }
 .cal-card.open .cal-chev svg { transform: rotate(90deg); }
 .cal-month { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.cal-month-head { text-align: center; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.cal-month-nav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px; }
+.cal-month-name { font-weight: 600; font-size: 14px; }
+.cal-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 30px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+.cal-nav-btn svg { width: 15px; height: 15px; }
+.cal-nav-btn:first-child svg { transform: rotate(180deg); }
+.cal-nav-btn:disabled { opacity: 0.35; cursor: default; }
 .cal-wd-row { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 2px; }
 .cal-wd-row div { text-align: center; font-size: 10.5px; color: var(--muted); text-transform: uppercase; }
 .cal-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }

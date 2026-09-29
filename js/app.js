@@ -665,8 +665,10 @@
 
   // Home calendar: a compact strip of the last 7 days - the same window the
   // Kaioken theme watches - with a dot on each day a workout was finished.
-  // Tapping unfolds the full month. View state only, never stored.
+  // Tapping unfolds the full month, navigable back through history (view
+  // state only, never stored).
   let calOpen = false;
+  let calOffset = 0; // displayed month relative to this month
 
   function workoutDays() {
     const days = {};
@@ -698,8 +700,9 @@
 
   function monthGridHTML(days) {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth();
+    const base = new Date(now.getFullYear(), now.getMonth() + calOffset, 1);
+    const y = base.getFullYear();
+    const m = base.getMonth();
     const lead = (new Date(y, m, 1).getDay() + 6) % 7; // Monday-first
     const dim = new Date(y, m + 1, 0).getDate();
     const wdRow = [];
@@ -707,16 +710,22 @@
       const wd = new Date(2024, 0, 1 + i); // 2024-01-01 was a Monday
       wdRow.push('<div>' + esc(wd.toLocaleDateString(undefined, { weekday: 'narrow' })) + '</div>');
     }
+    const thisMonth = calOffset === 0;
     const cells = [];
     for (let i = 0; i < lead; i++) cells.push('<div class="cal-m-cell blank"></div>');
     for (let d = 1; d <= dim; d++) {
       const k = isoKey(new Date(y, m, d));
       cells.push('<div class="cal-m-cell' + (days[k] ? ' has' : '') +
-        (d === now.getDate() ? ' today' : '') + '">' + d + '</div>');
+        (thisMonth && d === now.getDate() ? ' today' : '') + '">' + d + '</div>');
     }
     return '<div class="cal-month">' +
-      '<div class="cal-month-head">' +
-      esc(now.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })) +
+      '<div class="cal-month-nav">' +
+      '<button type="button" class="cal-nav-btn" id="cal-prev" aria-label="Previous month">' + I.chev + '</button>' +
+      '<span class="cal-month-name">' +
+      esc(base.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })) +
+      '</span>' +
+      '<button type="button" class="cal-nav-btn" id="cal-next" aria-label="Next month"' +
+      (thisMonth ? ' disabled' : '') + '>' + I.chev + '</button>' +
       '</div>' +
       '<div class="cal-wd-row">' + wdRow.join('') + '</div>' +
       '<div class="cal-month-grid">' + cells.join('') + '</div>' +
@@ -780,8 +789,22 @@
       sectionHTML('Scheduled', scheduled.map((r) => itemHTML(r, today)), '') +
       historyHTML;
 
-    document.getElementById('cal-toggle').onclick = () => {
+    document.getElementById('cal-toggle').onclick = (ev) => {
+      // the month area navigates; only the strip/chevron toggles the fold
+      if (ev && ev.target && ev.target.closest && ev.target.closest('.cal-month')) return;
       calOpen = !calOpen;
+      render();
+    };
+    const calPrev = document.getElementById('cal-prev');
+    if (calPrev) calPrev.onclick = (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      calOffset--;
+      render();
+    };
+    const calNext = document.getElementById('cal-next');
+    if (calNext) calNext.onclick = (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      calOffset = Math.min(0, calOffset + 1);
       render();
     };
     document.getElementById('act-new').onclick = () => go('new');
