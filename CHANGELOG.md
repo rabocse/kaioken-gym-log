@@ -6,6 +6,19 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.2.0] - 2026-09-29
+
+### Added
+- Personal records: the set circle turns into a golden flame the moment its
+  typed values would beat your best (estimated 1RM); marking it done toasts
+  a new PR and keeps the golden highlight.
+
+### Fixed
+- Drag reorder: the lifted exercise card was invisible while dragging (the
+  ghost inherited the original's hidden state).
+- iOS: the date field in New Routine overflowed the card edge (native
+  intrinsic width); it now matches the Name field.
+
 ## [1.1.0] - 2026-09-28
 
 ### Added
