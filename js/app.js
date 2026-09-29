@@ -316,6 +316,19 @@
   const saveTimers = new Map();
   const collapsedMonths = new Set();
 
+  // Workout focus: in an active routine the exercises fold down to their
+  // headers so only the one you are performing stays open. View state only,
+  // never stored: the current exercise unfolds when the workout starts and
+  // advances automatically as you complete its sets.
+  let activeOpenEx = null;
+  let lastFoldCtx = '';
+
+  function firstOpenExId(r) {
+    const withUndone = r.exercises.find((e) => e.sets.some((s) => !s.done));
+    const ex = withUndone || r.exercises[0];
+    return ex ? ex.id : null;
+  }
+
   function stopTimer() {
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
   }
@@ -910,8 +923,18 @@
         '<button type="button" class="' + (ex.unit === 'lb' ? 'on' : '') + '" data-u="lb">lb</button>' +
         '</div>';
 
-    return '<div class="card ex-card" data-eid="' + esc(ex.id) + '" data-cardio="' + (cardio ? '1' : '') + '">' +
+    const doneN = ex.sets.reduce((n, s) => n + (s.done ? 1 : 0), 0);
+    const folded = active && activeOpenEx !== ex.id;
+    const meta = active
+      ? doneN + '/' + ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets')
+      : ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets');
+
+    return '<div class="card ex-card' + (folded ? ' folded' : '') + '" data-eid="' + esc(ex.id) + '" data-cardio="' + (cardio ? '1' : '') + '">' +
       '<div class="ex-head">' +
+      (active
+        ? '<button class="btn btn-icon btn-fold" type="button" aria-label="' +
+          (folded ? 'Unfold exercise' : 'Fold exercise') + '">' + I.chev + '</button>'
+        : '') +
       '<input class="ex-name" placeholder="Exercise name" value="' + esc(ex.name) + '" maxlength="48" autocomplete="off" autocapitalize="words">' +
       '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.trash + '</button>' +
       '</div>' +
@@ -920,7 +943,7 @@
       unitSeg +
       '<span class="ex-meta">' +
       '<span class="cat-tag">' + esc(gymlogCategoryOf(ex.name)) + '</span>' +
-      '<span class="muted-small">' + ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets') + '</span>' +
+      '<span class="muted-small">' + meta + '</span>' +
       '</span>' +
       '</div>' +
       rows +
@@ -929,10 +952,17 @@
   }
   // Mark a set done / not done. Tapping a row toggles too, except on the
   // inputs and the delete button. Marking a set done that beats your best
-  // estimated 1RM for that exercise toasts a new personal record.
+  // estimated 1RM for that exercise toasts a new personal record; finishing
+  // an exercise's last set folds it and unfolds the next one.
   function toggleSet(r, ex, set) {
     set.done = !set.done;
     scheduleSave(r, true);
+    if (set.done && r.status === 'active') {
+      if (!ex.sets.some((s) => !s.done)) {
+        const next = r.exercises.find((x) => x.sets.some((s) => !s.done));
+        if (next) activeOpenEx = next.id;
+      }
+    }
     render();
     if (set.done && r.status === 'active') {
       const e = epleyKg(ex, set);
@@ -1131,6 +1161,17 @@
     if (!r) { view = { name: 'home' }; return renderHome(); }
     const editable = r.status !== 'completed';
     const activeView = r.status === 'active';
+    // (Re)pick the focused exercise when entering the routine or when the
+    // workout starts; afterwards the choice is the user's own.
+    if (activeView) {
+      const ctx = r.id + ':' + r.status;
+      if (lastFoldCtx !== ctx) {
+        lastFoldCtx = ctx;
+        activeOpenEx = firstOpenExId(r);
+      } else if (activeOpenEx && !r.exercises.some((e) => e.id === activeOpenEx)) {
+        activeOpenEx = null;
+      }
+    }
     const exCards = r.exercises.map((ex) => exerciseCardHTML(ex, editable, activeView)).join('');
 
     $app.innerHTML =
@@ -1219,6 +1260,12 @@
       const ex = r.exercises.find((e) => e.id === card.dataset.eid);
       if (!ex) return;
       if (editable && r.exercises.length > 1) attachExDrag(card, r);
+
+      const foldBtn = card.querySelector('.btn-fold');
+      if (foldBtn) foldBtn.onclick = () => {
+        activeOpenEx = (activeOpenEx === ex.id) ? null : ex.id;
+        render();
+      };
 
       const nameIn = card.querySelector('.ex-name');
       bindAutocomplete(nameIn, card.querySelector('.sug-box'), GYMLOG_EX_NAMES, (nm) => {
