@@ -1594,10 +1594,70 @@
   /* ---------- stats ---------- */
   const LB_TO_KG = 0.45359237;
   let statsTab = 'progression'; // progression | heatmap | volume
-  let statsSelKey = null;      // volume tab: selected week key
+  let statsSelKey = null;      // volume tab: selected week/month key
   let statsExSel = null;       // progression tab: selected exercise name
   let statsPointSel = null;    // progression tab: selected point index
   let statsCellSel = null;     // heatmap tab: { cat, key }
+  let statsRange = '3m';       // 4w | 3m | 6m | 1y | all
+
+  const STATS_RANGES = [
+    { id: '4w', label: '4W' },
+    { id: '3m', label: '3M' },
+    { id: '6m', label: '6M' },
+    { id: '1y', label: '1Y' },
+    { id: 'all', label: 'All' },
+  ];
+
+  // Inclusive start date of the selected range; null means all time.
+  function rangeStart(range) {
+    if (range === 'all') return null;
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (range === '4w') d.setDate(d.getDate() - 28);
+    else if (range === '6m') d.setMonth(d.getMonth() - 6);
+    else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
+    else d.setMonth(d.getMonth() - 3);
+    return d;
+  }
+
+  // Column buckets for the volume chart and the heatmap: weeks for the
+  // shorter ranges, months for the longer ones so the bars stay readable.
+  function rangeBuckets(range) {
+    const monthly = range === '6m' || range === '1y' || range === 'all';
+    const now = new Date();
+    const nowB = monthly
+      ? new Date(now.getFullYear(), now.getMonth(), 1)
+      : weekStart(now);
+    let firstB;
+    if (range === 'all') {
+      const rs = completedRoutines();
+      const d = rs.length ? routineDate(rs[0]) : nowB;
+      firstB = monthly
+        ? new Date(d.getFullYear(), d.getMonth(), 1)
+        : weekStart(d);
+    } else {
+      const s = rangeStart(range);
+      firstB = monthly
+        ? new Date(s.getFullYear(), s.getMonth(), 1)
+        : weekStart(s);
+    }
+    if (firstB > nowB) firstB = nowB;
+    const buckets = [];
+    const cur = new Date(firstB.getFullYear(), firstB.getMonth(), firstB.getDate());
+    while (cur <= nowB) {
+      buckets.push({ key: isoKey(cur), start: new Date(cur) });
+      if (monthly) cur.setMonth(cur.getMonth() + 1);
+      else cur.setDate(cur.getDate() + 7);
+    }
+    return { monthly: monthly, buckets: buckets };
+  }
+
+  // Key of the bucket (week or month) that contains date d.
+  function bucketKeyFor(monthly, d) {
+    return isoKey(monthly
+      ? new Date(d.getFullYear(), d.getMonth(), 1)
+      : weekStart(d));
+  }
 
   function weekStart(d) {
     const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1655,6 +1715,7 @@
   function progressionData() {
     const byName = {};
     completedRoutines().forEach((r) => {
+      const d = routineDate(r);
       r.exercises.forEach((ex) => {
         const nm = String(ex.name || '').trim();
         if (!nm) return;
@@ -1666,7 +1727,7 @@
           if (s.reps == null || s.weight == null || s.reps <= 0 || s.weight <= 0) return;
           const e = s.weight * (1 + s.reps / 30);
           if (!best || e > best.e) {
-            best = { reps: s.reps, weight: s.weight, unit: ex.unit, e: e, rdate: r.date };
+            best = { reps: s.reps, weight: s.weight, unit: ex.unit, e: e, rdate: r.date, ts: d ? d.getTime() : 0 };
           }
         });
         if (best) g.sessions.push(best);
@@ -1693,6 +1754,9 @@
       '<div class="seg seg-tabs">' + tabs.map((t) =>
         '<button type="button" class="' + (statsTab === t.id ? 'on' : '') + '" data-t="' + t.id + '">' +
         t.label + '</button>').join('') + '</div>' +
+      '<div class="seg seg-range">' + STATS_RANGES.map((r) =>
+        '<button type="button" class="' + (statsRange === r.id ? 'on' : '') + '" data-r="' + r.id + '">' +
+        r.label + '</button>').join('') + '</div>' +
       body;
 
     document.getElementById('act-back').onclick = () => go('home');
@@ -1700,6 +1764,16 @@
       b.onclick = () => {
         if (statsTab === b.dataset.t) return;
         statsTab = b.dataset.t;
+        render();
+      };
+    });
+    $app.querySelectorAll('.seg-range button').forEach((b) => {
+      b.onclick = () => {
+        if (statsRange === b.dataset.r) return;
+        statsRange = b.dataset.r;
+        statsSelKey = null;
+        statsPointSel = null;
+        statsCellSel = null;
         render();
       };
     });
@@ -1719,14 +1793,10 @@
     const selKey = String(statsExSel || '').toLowerCase();
     if (!selKey || !byName[selKey]) statsExSel = byName[names[0]].name;
     const g = byName[String(statsExSel).toLowerCase()];
-    const sessions = g.sessions;
-    const unit = sessions[sessions.length - 1].unit;
-    const vals = sessions.map((s) => (s.unit === 'lb' ? s.e * LB_TO_KG : s.e));
-    const disps = vals.map((v) => (unit === 'kg' ? v : v / LB_TO_KG));
-    if (statsPointSel == null || statsPointSel < 0 || statsPointSel >= sessions.length) {
-      statsPointSel = sessions.length - 1;
-    }
-    const sel = sessions[statsPointSel];
+    const start = rangeStart(statsRange);
+    const sessions = start
+      ? g.sessions.filter((s) => s.ts >= start.getTime())
+      : g.sessions;
 
     const options = names.map((n) => {
       const d = byName[n];
@@ -1735,6 +1805,20 @@
         (d.sessions.length === 1 ? ' session' : ' sessions') + '</option>';
     }).join('');
 
+    if (!sessions.length) {
+      return '<div class="card">' +
+        '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
+        '<div class="empty">No sessions in this range.</div>' +
+        '</div>';
+    }
+    const unit = sessions[sessions.length - 1].unit;
+    const vals = sessions.map((s) => (s.unit === 'lb' ? s.e * LB_TO_KG : s.e));
+    const disps = vals.map((v) => (unit === 'kg' ? v : v / LB_TO_KG));
+    if (statsPointSel == null || statsPointSel < 0 || statsPointSel >= sessions.length) {
+      statsPointSel = sessions.length - 1;
+    }
+    const sel = sessions[statsPointSel];
+
     return '<div class="card">' +
       '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
       progressionSVG(sessions, disps, unit) +
@@ -1742,16 +1826,16 @@
       ' \u00b7 top set ' + sel.weight + ' ' + esc(sel.unit) + ' \u00d7 ' + sel.reps +
       ' \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>' +
       '</div>' +
-      '<p class="hint">Estimated 1RM (Epley: weight \u00d7 (1 + reps/30)) of your best set per session. Tap a point to see its top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
+      '<p class="hint">Estimated 1RM (Epley: weight \u00d7 (1 + reps/30)) of your best set per session, spaced by date. Tap a point to see its top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
   }
 
   function progressionSVG(sessions, disps, unit) {
     const W = 320, H = 150, padX = 12, top = 26, bot = 24;
     const n = sessions.length;
-    const xs = [];
-    for (let i = 0; i < n; i++) {
-      xs.push(n === 1 ? W / 2 : padX + (W - 2 * padX) * (i / (n - 1)));
-    }
+    const t0 = sessions[0].ts;
+    const t1 = sessions[n - 1].ts;
+    const xs = sessions.map((s) =>
+      (n === 1 || t1 <= t0) ? W / 2 : padX + (W - 2 * padX) * ((s.ts - t0) / (t1 - t0)));
     let min = Math.min.apply(null, disps);
     let max = Math.max.apply(null, disps);
     if (min === max) { min = Math.max(0, min - 1); max = max + 1; }
@@ -1798,21 +1882,17 @@
   /* ---- heatmap tab ---- */
 
   function statsHeatmapHTML() {
-    const N = 12;
-    const start = weekStart(new Date());
-    const weeks = [];
-    for (let i = N - 1; i >= 0; i--) {
-      const ws = new Date(start.getFullYear(), start.getMonth(), start.getDate() - i * 7);
-      weeks.push({ key: isoKey(ws), start: ws });
-    }
+    const bb = rangeBuckets(statsRange);
+    const buckets = bb.buckets;
+    const monthly = bb.monthly;
     const byKey = {};
-    weeks.forEach((w) => { byKey[w.key] = w; });
+    buckets.forEach((w) => { byKey[w.key] = w; });
 
     const grid = {};
     completedRoutines().forEach((r) => {
       const d = routineDate(r);
       if (!d) return;
-      const w = byKey[isoKey(weekStart(d))];
+      const w = byKey[bucketKeyFor(monthly, d)];
       if (!w) return;
       r.exercises.forEach((ex) => {
         const cat = gymlogCategoryOf(ex.name);
@@ -1825,48 +1905,53 @@
       });
     });
 
-    const cats = GYMLOG_CATS.filter((c) => grid[c] && weeks.some((w) => grid[c][w.key]));
+    const cats = GYMLOG_CATS.filter((c) => grid[c] && buckets.some((w) => grid[c][w.key]));
     if (!cats.length) {
-      return '<div class="card"><div class="empty">No completed workouts in the last 12 weeks.</div></div>';
+      return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
     }
     let maxCell = 0;
-    cats.forEach((c) => weeks.forEach((w) => {
+    cats.forEach((c) => buckets.forEach((w) => {
       maxCell = Math.max(maxCell, (grid[c] && grid[c][w.key]) || 0);
     }));
 
     const rows = cats.map((cat) => {
-      const cells = weeks.map((w) => {
+      const cells = buckets.map((w) => {
         const v = (grid[cat] && grid[cat][w.key]) || 0;
         const sel = statsCellSel && statsCellSel.cat === cat && statsCellSel.key === w.key;
+        const per = monthly ? 'month of ' : 'week of ';
         if (v <= 0) {
           return '<button class="hcell' + (sel ? ' sel' : '') + '" type="button" data-cat="' + esc(cat) +
-            '" data-w="' + w.key + '" aria-label="' + esc(cat) + ', week of ' + fmtDay(w.key) + ': no volume"></button>';
+            '" data-w="' + w.key + '" aria-label="' + esc(cat) + ', ' + per + fmtDay(w.key) + ': no volume"></button>';
         }
         const lvl = Math.max(1, Math.min(4, Math.ceil((v / maxCell) * 4)));
         const op = [0, 0.25, 0.5, 0.75, 1][lvl];
         return '<button class="hcell' + (sel ? ' sel' : '') + '" type="button" data-cat="' + esc(cat) +
           '" data-w="' + w.key + '" style="background:' + GYMLOG_CAT_COLORS[cat] + ';opacity:' + op + '"' +
-          ' aria-label="' + esc(cat) + ', week of ' + fmtDay(w.key) + ': ' + fmtVol(v) + '"></button>';
+          ' aria-label="' + esc(cat) + ', ' + per + fmtDay(w.key) + ': ' + fmtVol(v) + '"></button>';
       }).join('');
       return '<div class="hrow"><span class="hlabel">' + esc(cat) + '</span>' +
-        '<div class="hcells">' + cells + '</div></div>';
+        '<div class="hcells" style="grid-template-columns: repeat(' + buckets.length + ', 1fr)">' + cells + '</div></div>';
     }).join('');
 
-    let detail = 'Tap a cell to see that muscle and week.';
+    let detail = 'Tap a cell to see that muscle and ' + (monthly ? 'month' : 'week') + '.';
     if (statsCellSel) {
       const cat = statsCellSel.cat;
       const v = (grid[cat] && grid[cat][statsCellSel.key]) || 0;
       const w = byKey[statsCellSel.key];
       const range = w
-        ? fmtDay(w.key) + ' \u2013 ' + fmtDay(isoKey(new Date(w.start.getFullYear(), w.start.getMonth(), w.start.getDate() + 6)))
+        ? (monthly
+          ? w.start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+          : fmtDay(w.key) + ' \u2013 ' + fmtDay(isoKey(new Date(w.start.getFullYear(), w.start.getMonth(), w.start.getDate() + 6))))
         : '';
-      detail = esc(cat) + ' \u00b7 week of ' + range +
+      detail = esc(cat) + ' \u00b7 ' + range +
         ' \u00b7 <b>' + (v > 0 ? fmtVol(v) : 'no volume') + '</b>';
     }
 
     return '<div class="card">' + rows + '</div>' +
       '<div class="card"><div class="cell-detail">' + detail + '</div></div>' +
-      '<p class="hint">Training volume by muscle group over the last 12 weeks (Monday-start). Darker means more volume (kg-normalized).</p>';
+      '<p class="hint">Training volume by muscle group per ' +
+      (monthly ? 'month' : 'week (Monday-start)') +
+      ' for the selected range. Darker means more volume (kg-normalized).</p>';
   }
 
   function bindHeatmap() {
@@ -1881,20 +1966,16 @@
   /* ---- volume tab ---- */
 
   function statsVolumeHTML() {
-    const N = 8;
-    const start = weekStart(new Date());
-    const cols = [];
-    for (let i = N - 1; i >= 0; i--) {
-      const ws = new Date(start.getFullYear(), start.getMonth(), start.getDate() - i * 7);
-      cols.push({ key: isoKey(ws), start: ws, cats: {} });
-    }
+    const bb = rangeBuckets(statsRange);
+    const buckets = bb.buckets;
+    const monthly = bb.monthly;
     const byKey = {};
-    cols.forEach((c) => { byKey[c.key] = c; });
+    buckets.forEach((c) => { c.cats = {}; byKey[c.key] = c; });
 
     completedRoutines().forEach((r) => {
       const d = routineDate(r);
       if (!d) return;
-      const col = byKey[isoKey(weekStart(d))];
+      const col = byKey[bucketKeyFor(monthly, d)];
       if (!col) return;
       r.exercises.forEach((ex) => {
         const cat = gymlogCategoryOf(ex.name);
@@ -1907,30 +1988,34 @@
     });
 
     let totalAll = 0;
-    cols.forEach((c) => {
+    buckets.forEach((c) => {
       c.total = 0;
       Object.keys(c.cats).forEach((k) => { c.total += c.cats[k]; });
       totalAll += c.total;
     });
-    const max = Math.max.apply(null, cols.map((c) => c.total).concat([1]));
+    const max = Math.max.apply(null, buckets.map((c) => c.total).concat([1]));
 
-    const lastWithVolume = cols.slice().reverse().find((c) => c.total > 0);
+    const lastWithVolume = buckets.slice().reverse().find((c) => c.total > 0);
     if (!statsSelKey || !byKey[statsSelKey]) {
-      statsSelKey = lastWithVolume ? lastWithVolume.key : cols[cols.length - 1].key;
+      statsSelKey = lastWithVolume ? lastWithVolume.key : buckets[buckets.length - 1].key;
     }
     const sel = byKey[statsSelKey];
-    const selEnd = new Date(sel.start.getFullYear(), sel.start.getMonth(), sel.start.getDate() + 6);
+    const selEnd = monthly
+      ? new Date(sel.start.getFullYear(), sel.start.getMonth() + 1, 0)
+      : new Date(sel.start.getFullYear(), sel.start.getMonth(), sel.start.getDate() + 6);
 
-    const chartHTML = cols.map((c) => {
+    const chartHTML = buckets.map((c) => {
       const segs = GYMLOG_CATS.slice().reverse()
         .filter((cat) => c.cats[cat] > 0)
         .map((cat) => '<div class="segm" style="height:' +
           ((c.cats[cat] / max) * 100).toFixed(3) + '%;background:' +
           GYMLOG_CAT_COLORS[cat] + '"></div>')
         .join('');
-      const label = c.start.getDate() + '/' + (c.start.getMonth() + 1);
+      const label = monthly
+        ? (c.start.getMonth() + 1) + '/' + String(c.start.getFullYear()).slice(-2)
+        : c.start.getDate() + '/' + (c.start.getMonth() + 1);
       return '<button class="col' + (c.key === sel.key ? ' sel' : '') + '" data-w="' + c.key +
-        '" type="button" aria-label="Week of ' + fmtDay(c.key) + '">' +
+        '" type="button" aria-label="' + (monthly ? 'Month of ' : 'Week of ') + fmtDay(c.key) + '">' +
         '<span class="col-total">' + (c.total > 0 ? fmtVolCompact(c.total) : '') + '</span>' +
         (c.total > 0 ? '<span class="segs">' + segs + '</span>' : '<span class="segs empty"></span>') +
         '<span class="col-label">' + label + '</span>' +
@@ -1948,17 +2033,23 @@
     }).join('');
 
     return '<div class="card note">' +
-      '<div class="sum-row"><span>8-week total</span><b>' + fmtVol(totalAll) + '</b></div>' +
-      '<div class="sum-row"><span>Weekly average</span><b>' + fmtVol(totalAll / N) + '</b></div>' +
+      '<div class="sum-row"><span>Range total</span><b>' + fmtVol(totalAll) + '</b></div>' +
+      '<div class="sum-row"><span>' + (monthly ? 'Monthly' : 'Weekly') + ' average</span><b>' +
+      fmtVol(totalAll / buckets.length) + '</b></div>' +
       '</div>' +
       '<div class="card chart-card">' +
       '<div class="chart">' + chartHTML + '</div>' +
       '</div>' +
       '<div class="card">' +
-      '<div class="section-label slim">Week of ' + fmtDay(sel.key) + ' \u2013 ' + fmtDay(isoKey(selEnd)) + '</div>' +
-      (rows || '<div class="empty-inline">No volume this week.</div>') +
+      '<div class="section-label slim">' +
+      (monthly
+        ? 'Month of ' + sel.start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+        : 'Week of ' + fmtDay(sel.key) + ' \u2013 ' + fmtDay(isoKey(selEnd))) +
       '</div>' +
-      '<p class="hint">Volume = weight \u00d7 reps per set, completed routines only. Totals are normalized to kg for comparison (1 kg = 2.2046 lb); your logged entries are unchanged.</p>';
+      (rows || '<div class="empty-inline">No volume in this ' + (monthly ? 'month' : 'week') + '.</div>') +
+      '</div>' +
+      '<p class="hint">Volume = weight \u00d7 reps per set, completed routines only, bucketed per ' +
+      (monthly ? 'month' : 'week') + '. Totals are normalized to kg for comparison (1 kg = 2.2046 lb); your logged entries are unchanged.</p>';
   }
 
   function bindVolume() {
