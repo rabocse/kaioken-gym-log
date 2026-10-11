@@ -1599,6 +1599,11 @@
   let statsPointSel = null;    // progression tab: selected point index
   let statsCellSel = null;     // heatmap tab: { cat, key }
   let statsRange = '3m';       // 4w | 3m | 6m | 1y | all
+  let statsExType = 'line';         // progression: line | bar
+  let statsExMode = 'continuous';   // progression line: discrete | continuous
+  let statsVolType = 'bar';         // volume: bar | line
+  let statsVolMode = 'continuous';   // volume line: discrete | continuous
+  let statsMusView = 'heat';        // muscles: heat | radar
 
   const STATS_RANGES = [
     { id: '4w', label: '4W' },
@@ -1607,6 +1612,24 @@
     { id: '1y', label: '1Y' },
     { id: 'all', label: 'All' },
   ];
+  const EX_TYPES = [{ id: 'line', label: 'Line' }, { id: 'bar', label: 'Bar' }];
+  const VOL_TYPES = [{ id: 'bar', label: 'Bar' }, { id: 'line', label: 'Line' }];
+  const PLOT_MODES = [{ id: 'discrete', label: 'Discrete' }, { id: 'continuous', label: 'Continuous' }];
+  const MUS_VIEWS = [{ id: 'heat', label: 'Heat' }, { id: 'radar', label: 'Radar' }];
+
+  // Small segmented control for chart options; cur is the active option id.
+  function segHTML(id, options, cur) {
+    return '<div class="seg seg-mini" id="' + id + '">' + options.map((o) =>
+      '<button type="button" class="' + (cur === o.id ? 'on' : '') + '" data-v="' + o.id + '">' +
+      o.label + '</button>').join('') + '</div>';
+  }
+
+  // Wire a segHTML control: apply the chosen value, then re-render.
+  function bindSeg(id, apply) {
+    $app.querySelectorAll('#' + id + ' button').forEach((b) => {
+      b.onclick = () => { apply(b.dataset.v); render(); };
+    });
+  }
 
   // Inclusive start date of the selected range; null means all time.
   function rangeStart(range) {
@@ -1657,6 +1680,47 @@
     return isoKey(monthly
       ? new Date(d.getFullYear(), d.getMonth(), 1)
       : weekStart(d));
+  }
+
+  // Start of the range immediately before the selected one, so the radar
+  // can overlay a comparison; null for all time (nothing to compare to).
+  function prevRangeStart(range, start) {
+    if (range === 'all' || !start) return null;
+    const d = new Date(start);
+    if (range === '4w') d.setDate(d.getDate() - 28);
+    else if (range === '6m') d.setMonth(d.getMonth() - 6);
+    else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
+    else d.setMonth(d.getMonth() - 3);
+    return d;
+  }
+
+  // Human label of a range id, for radar legends and hints.
+  function rangeWord(range) {
+    if (range === '4w') return '4 weeks';
+    if (range === '6m') return '6 months';
+    if (range === '1y') return 'year';
+    if (range === 'all') return 'period';
+    return '3 months';
+  }
+
+  // Total volume per muscle category in [from, to); null bound = unbounded.
+  function volumeByCat(from, to) {
+    const totals = {};
+    completedRoutines().forEach((r) => {
+      const d = routineDate(r);
+      if (!d) return;
+      const t = d.getTime();
+      if (from && t < from.getTime()) return;
+      if (to && t >= to.getTime()) return;
+      r.exercises.forEach((ex) => {
+        const cat = gymlogCategoryOf(ex.name);
+        ex.sets.forEach((s) => {
+          const v = setVolumeKg(ex, s);
+          if (v > 0) totals[cat] = (totals[cat] || 0) + v;
+        });
+      });
+    });
+    return totals;
   }
 
   function weekStart(d) {
@@ -1743,7 +1807,7 @@
       { id: 'volume', label: 'Volume' },
     ];
     let body;
-    if (statsTab === 'heatmap') body = statsHeatmapHTML();
+    if (statsTab === 'heatmap') body = statsMusclesHTML();
     else if (statsTab === 'volume') body = statsVolumeHTML();
     else body = statsProgressionHTML();
 
@@ -1777,7 +1841,7 @@
         render();
       };
     });
-    if (statsTab === 'heatmap') bindHeatmap();
+    if (statsTab === 'heatmap') bindMuscles();
     else if (statsTab === 'volume') bindVolume();
     else bindProgression();
   }
@@ -1821,15 +1885,19 @@
 
     return '<div class="card">' +
       '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
-      progressionSVG(sessions, disps, unit) +
+      '<div class="seg-row">' +
+      segHTML('seg-ex-type', EX_TYPES, statsExType) +
+      (statsExType === 'line' ? segHTML('seg-ex-mode', PLOT_MODES, statsExMode) : '') +
+      '</div>' +
+      progressionSVG(sessions, disps, unit, statsExType, statsExMode) +
       '<div class="cell-detail">Est. 1RM <b>' + fmt1(disps[statsPointSel]) + ' ' + esc(unit) + '</b>' +
       ' \u00b7 top set ' + sel.weight + ' ' + esc(sel.unit) + ' \u00d7 ' + sel.reps +
       ' \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>' +
       '</div>' +
-      '<p class="hint">Estimated 1RM (Epley: weight \u00d7 (1 + reps/30)) of your best set per session, spaced by date. Tap a point to see its top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
+      '<p class="hint">Estimated 1RM (Epley: weight \u00d7 (1 + reps/30)) of your best set per session, spaced by date. Tap a point or bar to see its top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
   }
 
-  function progressionSVG(sessions, disps, unit) {
+  function progressionSVG(sessions, disps, unit, type, mode) {
     const W = 320, H = 150, padX = 12, top = 26, bot = 24;
     const n = sessions.length;
     const t0 = sessions[0].ts;
@@ -1849,16 +1917,25 @@
       '<circle class="pt" data-i="' + i + '" cx="' + xs[i].toFixed(1) + '" cy="' + y(disps[i]).toFixed(1) +
       '" r="' + (i === n - 1 ? 4 : 3) + '" fill="' + (i === statsPointSel ? 'var(--text)' : 'var(--accent)') + '"/>'
     ).join('');
+    let minGap = Infinity;
+    for (let i = 1; i < n; i++) minGap = Math.min(minGap, xs[i] - xs[i - 1]);
+    const bw = n > 1 ? Math.max(4, Math.min(24, minGap * 0.6)) : 24;
+    const bars = sessions.map((s, i) =>
+      '<rect class="pbar' + (i === statsPointSel ? ' sel' : '') + '" data-i="' + i + '" x="' +
+      (xs[i] - bw / 2).toFixed(1) + '" y="' + y(disps[i]).toFixed(1) + '" width="' + bw.toFixed(1) +
+      '" height="' + Math.max(0, H - bot - y(disps[i])).toFixed(1) + '" rx="2"/>'
+    ).join('');
     const lastY = y(disps[n - 1]);
     const lx = Math.min(W - 30, Math.max(30, xs[n - 1])).toFixed(1);
     const ly = (lastY > 42 ? lastY - 12 : lastY + 18).toFixed(1);
-
-    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Progression over sessions">' +
-      (n > 1
+    const plot = type === 'bar' ? bars :
+      (mode === 'continuous' && n > 1
         ? '<polygon class="area" points="' + pts.join(' ') + ' ' + xs[n - 1].toFixed(1) + ',' + base + ' ' + xs[0].toFixed(1) + ',' + base + '"/>' +
           '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-        : '') +
-      dots +
+        : '') + dots;
+
+    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Progression over sessions">' +
+      plot +
       '<text class="lbl" x="' + lx + '" y="' + ly + '" text-anchor="middle">' +
       fmt1(disps[n - 1]) + ' ' + esc(unit) + '</text>' +
       '<text class="axis" x="' + padX + '" y="' + (H - 8) + '">' + esc(fmtDay(sessions[0].rdate)) + '</text>' +
@@ -1874,17 +1951,36 @@
       statsPointSel = null;
       render();
     };
-    $app.querySelectorAll('.pt').forEach((el) => {
+    bindSeg('seg-ex-type', (v) => { statsExType = v; });
+    bindSeg('seg-ex-mode', (v) => { statsExMode = v; });
+    $app.querySelectorAll('.pt, .pbar').forEach((el) => {
       el.onclick = () => { statsPointSel = Number(el.dataset.i); render(); };
     });
   }
 
   /* ---- heatmap tab ---- */
 
-  function statsHeatmapHTML() {
+  function statsMusclesHTML() {
     const bb = rangeBuckets(statsRange);
     const buckets = bb.buckets;
     const monthly = bb.monthly;
+    const start = rangeStart(statsRange);
+    const prevStart = prevRangeStart(statsRange, start);
+    const cur = volumeByCat(start, null);
+    const prev = prevStart ? volumeByCat(prevStart, start) : null;
+    const any = GYMLOG_CATS.some((c) =>
+      (cur[c] || 0) > 0 || (prev ? (prev[c] || 0) > 0 : false));
+    if (!any) {
+      return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
+    }
+    const seg = '<div class="seg-row">' +
+      segHTML('seg-mus-view', MUS_VIEWS, statsMusView) + '</div>';
+    return statsMusView === 'radar'
+      ? seg + radarHTML(cur, prev)
+      : seg + heatHTML(buckets, monthly);
+  }
+
+  function heatHTML(buckets, monthly) {
     const byKey = {};
     buckets.forEach((w) => { byKey[w.key] = w; });
 
@@ -1954,7 +2050,53 @@
       ' for the selected range. Darker means more volume (kg-normalized).</p>';
   }
 
-  function bindHeatmap() {
+  function radarHTML(cur, prev) {
+    return '<div class="card">' + radarSVG(cur, prev) +
+      (prev
+        ? '<div class="cell-detail rlegend"><span class="rkey rkey-cur"></span>selected range' +
+          '<span class="rkey rkey-prev"></span>previous ' + rangeWord(statsRange) + '</div>'
+        : '') +
+      '</div>' +
+      '<p class="hint">Total volume by muscle group for the selected range (kg-normalized).' +
+      (prev ? ' Solid = selected range, dashed = the ' + rangeWord(statsRange) + ' before it.' : '') + '</p>';
+  }
+
+  function radarSVG(cur, prev) {
+    const cats = GYMLOG_CATS.filter((c) =>
+      (cur[c] || 0) > 0 || (prev ? (prev[c] || 0) > 0 : false));
+    const n = cats.length;
+    const W = 320, H = 270, cx = W / 2, cy = H / 2;
+    const R = Math.min(W, H) / 2 - 30;
+    let max = 0;
+    cats.forEach((c) => {
+      max = Math.max(max, cur[c] || 0, prev ? prev[c] || 0 : 0);
+    });
+    const ang = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
+    const pt = (i, v) => {
+      const r = R * (max ? v / max : 0);
+      return (cx + r * Math.cos(ang(i))).toFixed(1) + ',' + (cy + r * Math.sin(ang(i))).toFixed(1);
+    };
+    const rings = [0.25, 0.5, 0.75, 1].map((f) =>
+      '<circle class="rring" cx="' + cx + '" cy="' + cy + '" r="' + (R * f).toFixed(1) + '"/>').join('');
+    const spokes = cats.map((c, i) =>
+      '<line class="rspoke" x1="' + cx + '" y1="' + cy + '" x2="' +
+      (cx + R * Math.cos(ang(i))).toFixed(1) + '" y2="' + (cy + R * Math.sin(ang(i))).toFixed(1) + '"/>').join('');
+    const labels = cats.map((c, i) =>
+      '<text class="rlbl' + ((cur[c] || 0) > 0 ? '' : ' off') + '" x="' +
+      (cx + (R + 16) * Math.cos(ang(i))).toFixed(1) + '" y="' +
+      (cy + (R + 16) * Math.sin(ang(i))).toFixed(1) + '" text-anchor="middle">' + esc(c) + '</text>').join('');
+    return '<svg class="radarsvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Volume by muscle group">' +
+      rings + spokes +
+      (prev && cats.some((c) => (prev[c] || 0) > 0)
+        ? '<polygon class="rprev" points="' + cats.map((c, i) => pt(i, prev[c] || 0)).join(' ') + '"/>'
+        : '') +
+      '<polygon class="rcur" points="' + cats.map((c, i) => pt(i, cur[c] || 0)).join(' ') + '"/>' +
+      labels +
+      '</svg>';
+  }
+
+  function bindMuscles() {
+    bindSeg('seg-mus-view', (v) => { statsMusView = v; });
     $app.querySelectorAll('.hcell').forEach((el) => {
       el.onclick = () => {
         statsCellSel = { cat: el.dataset.cat, key: el.dataset.w };
@@ -2038,7 +2180,13 @@
       fmtVol(totalAll / buckets.length) + '</b></div>' +
       '</div>' +
       '<div class="card chart-card">' +
-      '<div class="chart">' + chartHTML + '</div>' +
+      '<div class="seg-row">' +
+      segHTML('seg-vol-type', VOL_TYPES, statsVolType) +
+      (statsVolType === 'line' ? segHTML('seg-vol-mode', PLOT_MODES, statsVolMode) : '') +
+      '</div>' +
+      (statsVolType === 'bar'
+        ? '<div class="chart">' + chartHTML + '</div>'
+        : volumeLineSVG(buckets, monthly)) +
       '</div>' +
       '<div class="card">' +
       '<div class="section-label slim">' +
@@ -2052,8 +2200,55 @@
       (monthly ? 'month' : 'week') + '. Totals are normalized to kg for comparison (1 kg = 2.2046 lb); your logged entries are unchanged.</p>';
   }
 
+  // Volume totals per bucket as an SVG trend line (line chart mode).
+  function volumeLineSVG(buckets, monthly) {
+    const W = 320, H = 170, padX = 14, top = 18, bot = 24;
+    const n = buckets.length;
+    const ts = buckets.map((c) => c.start.getTime());
+    const xs = buckets.map((c, i) =>
+      (n === 1 || ts[n - 1] <= ts[0]) ? W / 2 : padX + (W - 2 * padX) * ((ts[i] - ts[0]) / (ts[n - 1] - ts[0])));
+    const vals = buckets.map((c) => c.total);
+    let min = Math.min.apply(null, vals);
+    let max = Math.max.apply(null, vals);
+    if (min === max) { min = Math.max(0, min - 1); max = max + 1; }
+    const span = (max - min) * 0.08;
+    const lo = min - span;
+    const hi = max + span;
+    const y = (v) => top + (H - top - bot) * (1 - (v - lo) / (hi - lo));
+    const pts = buckets.map((c, i) => xs[i].toFixed(1) + ',' + y(c.total).toFixed(1));
+    const base = (H - bot).toFixed(1);
+    const dots = buckets.map((c, i) =>
+      '<circle class="vpt" data-w="' + c.key + '" cx="' + xs[i].toFixed(1) + '" cy="' + y(c.total).toFixed(1) +
+      '" r="' + (c.key === statsSelKey ? 4.5 : 3.5) + '" fill="' +
+      (c.key === statsSelKey ? 'var(--text)' : 'var(--accent)') + '"/>'
+    ).join('');
+    const last = buckets[n - 1];
+    const lbl = last.total > 0
+      ? '<text class="lbl" x="' + xs[n - 1].toFixed(1) + '" y="' +
+        Math.max(y(last.total) - 10, 12).toFixed(1) + '" text-anchor="middle">' +
+        fmtVolCompact(last.total) + '</text>'
+      : '';
+    const blabel = (c) => monthly
+      ? c.start.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+      : fmtDay(c.key);
+    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Volume trend">' +
+      (n > 1 && statsVolMode === 'continuous'
+        ? '<polygon class="area" points="' + pts.join(' ') + ' ' + xs[n - 1].toFixed(1) + ',' + base + ' ' + xs[0].toFixed(1) + ',' + base + '"/>' +
+          '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+        : '') +
+      dots + lbl +
+      '<text class="axis" x="' + padX + '" y="' + (H - 8) + '">' + esc(blabel(buckets[0])) + '</text>' +
+      '<text class="axis" x="' + (W - padX) + '" y="' + (H - 8) + '" text-anchor="end">' + esc(blabel(last)) + '</text>' +
+      '</svg>';
+  }
+
   function bindVolume() {
+    bindSeg('seg-vol-type', (v) => { statsVolType = v; });
+    bindSeg('seg-vol-mode', (v) => { statsVolMode = v; });
     $app.querySelectorAll('.col').forEach((el) => {
+      el.onclick = () => { statsSelKey = el.dataset.w; render(); };
+    });
+    $app.querySelectorAll('.vpt').forEach((el) => {
       el.onclick = () => { statsSelKey = el.dataset.w; render(); };
     });
   }
