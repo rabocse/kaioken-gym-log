@@ -687,7 +687,9 @@ input[type="date"] {
 }
 .ex-head .ex-name::placeholder { color: var(--muted); opacity: 0.7; }
 .ex-head .ex-name:focus { outline: none; border-bottom-color: var(--accent); }
-.ex-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ex-head .seg { flex: none; }
+.ex-head .seg button { padding: 3px 8px; font-size: 12px; min-width: 34px; min-height: 30px; }
+.ex-controls { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 8px; }
 .ex-controls .seg button { padding: 4px 10px; font-size: 13px; min-width: 40px; }
 .muted-small { color: var(--muted); font-size: 13.5px; }
 
