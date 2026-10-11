@@ -11,20 +11,33 @@ No App Store, no account, no server — your data stays on your phone.
 - Cardio exercises from the catalog (Running, Treadmill, Cycling, ...) log minutes and distance (km or mi) instead of reps × weight
 - Per exercise: any number of sets, reps per set, weight per set
 - Weight unit (kg / lb) is chosen **per exercise** — mix freely within one routine
-- Start a workout to start the timer; finish it to record the duration
+- Warm-up sets: a Warm up button adds warm-ups that group above your working
+  sets (new ones append below the last warm-up and copy its values); marked
+  with a thermometer icon and excluded from PRs and volume stats
+- Live per-exercise stats: Volume, Reps and average weight under each
+  exercise, updating as you type
+- Start a workout to start the timer (a compact one-line elapsed box);
+  finish it to record the duration
 - During a workout: exercises fold to slim headers so you focus on one; all start folded - unfold the one you are on, and finishing its sets folds it and unfolds the next
 - Tap a set to mark it done (green check + highlight); tap again to undo
-- Personal records: the set circle turns into a golden flame the moment its typed values would beat your best (estimated 1RM); marking it done toasts a new PR and keeps the golden highlight
+- Personal records: the set circle turns into a golden flame the moment its typed values would beat your best (estimated 1RM, warm-ups excluded); marking it done toasts a new PR and keeps the golden highlight
 - Automatic rest countdown after each completed set (1 / 1.5 / 2 min, configurable in Settings)
 - On finishing a workout: a creatine/protein check-in (yes/no switch) and an optional body-weight entry, saved with the routine
 - Eleven color themes (dark, OLED, mono, nord, ocean, forest, violet, ember, ruby, light, paper), switchable in Settings
 - Kaioken theme: runs cold and heats up (Kaio-ken ×1–×20) with your last 7 days of training, with a live level chip on Home
 - Background styles (Settings): subtle generated texture, or one of your own photos (stored on-device, offline, theme-tinted, Fill or Fit), with frosted cards
 - Exercise categories auto-tagged from the built-in catalog (chest, back, legs, ...)
-- Stats screen, three tabs:
-  - Progression: per-exercise line chart of estimated 1RM (Epley), tap a point for its top set
-  - Muscles: 12-week training volume heatmap by muscle group
-  - Volume: weekly stacked volume bars by muscle group, tap a column for the breakdown
+- Stats screen, three tabs — every graph has a time range (Last month, 3
+  months, 6 months, Last year, All time) and all its options (chart type,
+  style, range) behind one compact button that opens a bottom sheet:
+  - Progression: per-exercise **top set weight** per session (heaviest
+    working set, warm-ups excluded), spaced by actual date — Line or Bar,
+    Discrete dots or Continuous curve with area fill
+  - Muscles: training volume by muscle group as a **radar chart** (the
+    previous equal range overlaid dashed for comparison) or the classic
+    heatmap
+  - Volume: weekly (or monthly) totals as stacked bars by muscle group or
+    a line/area trend; tap a column or point for the breakdown
 - Repeat or delete past workouts by holding them (or right-clicking): long-press action sheet
 - History of completed routines grouped by month (collapsible); past workouts are dimmed
 - Home: a compact last-7-days calendar strip with a dot on each day you finished a workout (the same 7 days the Kaioken theme watches); tap it to unfold the full month
@@ -104,3 +117,8 @@ Go + SQLite backend can sit behind the same UI — the data model in
 
 - Per-exercise history ("retrieve from log", like StrengthLog)
 - Optional Go + SQLite sync backend
+
+## Say thanks
+
+If Kaioken saves you a subscription and you want to say thanks, you can
+buy the author a coffee: <https://buymeacoffee.com/rabocse>
