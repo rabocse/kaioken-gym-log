@@ -785,8 +785,32 @@ input[type="date"] {
 .set-idx { color: var(--muted); font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
 .mult { color: var(--muted); text-align: center; font-size: 13px; }
 .unit-tag { min-width: 24px; color: var(--muted); font-size: 13px; text-align: center; }
-.btn-del-set { min-width: 34px; min-height: 40px; padding: 6px; }
-.btn-del-set svg { width: 16px; height: 16px; }
+.btn-del-set {
+  min-width: 32px;
+  min-height: 40px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-del-set svg { width: 18px; height: 18px; }
+.btn-del-set:hover { color: var(--danger); }
+.ex-head .btn-del-ex {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 4px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ex-head .btn-del-ex svg { width: 22px; height: 22px; stroke-width: 2.75; }
+.ex-head .btn-del-ex:hover { color: var(--danger); }
 .btn-add-set { min-height: 42px; margin-top: 4px; color: var(--muted); font-size: 15px; }
 
 .ex-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 600; font-size: 16.5px; }

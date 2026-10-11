@@ -1025,7 +1025,7 @@
           (folded ? 'Unfold exercise' : 'Fold exercise') + '">' + I.chev + '</button>'
         : '') +
       '<input class="ex-name" placeholder="Exercise name" value="' + esc(ex.name) + '" maxlength="48" autocomplete="off" autocapitalize="words">' +
-      '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.trash + '</button>' +
+      '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.x + '</button>' +
       '</div>' +
       '<div class="sug-box" hidden></div>' +
       '<div class="ex-controls">' +
