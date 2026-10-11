@@ -6,6 +6,15 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.3.1] - 2026-10-11
+
+### Fixed
+- Warm-up button: new warm-up sets are added below the existing warm-up
+  sets (previously always inserted at the very top of the card) and copy
+  the values of the last warm-up set, like the regular + button does.
+- Elapsed-time box reduced to a single compact line (clock · start time)
+  while a workout is active.
+
 ## [1.3.0] - 2026-10-11
 
 ### Added
