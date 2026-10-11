@@ -662,9 +662,8 @@ input[type="date"] {
 }
 
 /* ---------- timer + summary ---------- */
-.timer-card { text-align: center; padding: 20px 16px; }
-.timer-label { font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-.timer { margin: 6px 0 2px; font-size: 46px; font-weight: 700; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.timer-card { display: flex; align-items: baseline; justify-content: center; gap: 6px; padding: 10px 16px; }
+.timer { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
 .timer-sub { color: var(--muted); font-size: 13.5px; }
 
 .sum-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; font-size: 15px; }

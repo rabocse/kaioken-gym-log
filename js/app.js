@@ -882,11 +882,10 @@
   function statusCardHTML(r) {
     if (r.status === 'active') {
       return '<div class="card timer-card">' +
-        '<div class="timer-label">Elapsed time</div>' +
-        '<div class="timer" id="elapsed">' + fmtClock(Date.now() - r.startedAt) + '</div>' +
-        '<div class="timer-sub">started at ' +
+        '<span class="timer" id="elapsed">' + fmtClock(Date.now() - r.startedAt) + '</span>' +
+        '<span class="timer-sub">· started ' +
         new Date(r.startedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) +
-        '</div></div>';
+        '</span></div>';
     }
     if (r.status === 'scheduled') {
       if (r.date > todayISO()) {
