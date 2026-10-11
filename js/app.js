@@ -1601,41 +1601,86 @@
   let statsRange = '3m';       // 4w | 3m | 6m | 1y | all
   let statsExType = 'line';         // progression: line | bar
   let statsExMode = 'continuous';   // progression line: discrete | continuous
-  let statsVolType = 'bar';         // volume: bar | line
+  let statsVolType = 'line';        // volume: bar | line
   let statsVolMode = 'continuous';   // volume line: discrete | continuous
   let statsMusView = 'heat';        // muscles: heat | radar
 
   const STATS_RANGES = [
-    { id: '4w', label: '4W' },
-    { id: '3m', label: '3M' },
-    { id: '6m', label: '6M' },
-    { id: '1y', label: '1Y' },
-    { id: 'all', label: 'All' },
+    { id: '4w', label: 'Last 4 weeks' },
+    { id: '3m', label: 'Last 3 months' },
+    { id: '6m', label: 'Last 6 months' },
+    { id: '1y', label: 'Last year' },
+    { id: 'all', label: 'All time' },
   ];
   const EX_TYPES = [{ id: 'line', label: 'Line' }, { id: 'bar', label: 'Bar' }];
   const VOL_TYPES = [{ id: 'bar', label: 'Bar' }, { id: 'line', label: 'Line' }];
   const PLOT_MODES = [{ id: 'discrete', label: 'Discrete' }, { id: 'continuous', label: 'Continuous' }];
   const MUS_VIEWS = [{ id: 'heat', label: 'Heat' }, { id: 'radar', label: 'Radar' }];
 
-  // Small segmented control for chart options; cur is the active option id.
-  function segHTML(id, options, cur) {
-    return '<div class="seg seg-mini" id="' + id + '">' + options.map((o) =>
-      '<button type="button" class="' + (cur === o.id ? 'on' : '') + '" data-v="' + o.id + '">' +
-      o.label + '</button>').join('') + '</div>';
+  // Switching the range invalidates selections keyed to the old buckets.
+  function setStatsRange(v) {
+    if (statsRange === v) return;
+    statsRange = v;
+    statsSelKey = null;
+    statsPointSel = null;
+    statsCellSel = null;
   }
 
-  // Wire a segHTML control: apply the chosen value, then re-render.
-  function bindSeg(id, apply) {
-    $app.querySelectorAll('#' + id + ' button').forEach((b) => {
-      b.onclick = () => { apply(b.dataset.v); render(); };
+  // One compact options button per graph card - the overflow-menu pattern
+  // recommended for space-constrained chart toolbars.
+  function chartOptsBtn(id) {
+    return '<button class="btn btn-icon chart-opts" id="' + id + '" type="button" aria-label="Chart options">' +
+      I.chart + '</button>';
+  }
+
+  function rangeOptsGroup() {
+    return {
+      label: 'Range',
+      items: STATS_RANGES.map((o) => ({ key: 'range:' + o.id, label: o.label, on: statsRange === o.id })),
+    };
+  }
+
+  // Bottom sheet of grouped choices with a check on the active option,
+  // following the app's long-press action sheet pattern.
+  function openOptsSheet(title, groups, apply) {
+    closeSheet();
+    sheetGestureLock = true;
+    const guard = (fn) => () => {
+      if (sheetGestureLock) return;
+      fn();
+    };
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">' + esc(title) + '</div>' +
+      groups.map((g) =>
+        '<div class="opts-head">' + esc(g.label) + '</div>' +
+        g.items.map((it) =>
+          '<button class="btn btn-block opts-item' + (it.on ? ' on' : '') + '" type="button" data-k="' +
+          esc(it.key) + '">' +
+          '<span class="opts-check">' + (it.on ? I.check : '') + '</span>' +
+          '<span>' + esc(it.label) + '</span></button>'
+        ).join('')
+      ).join('') +
+      '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('sheet-cancel').onclick = guard(closeSheet);
+    sheet.querySelectorAll('.opts-item').forEach((b) => {
+      b.onclick = guard(() => {
+        closeSheet();
+        apply(b.dataset.k);
+      });
     });
   }
 
-  // Range chips embedded in a chart card (bound centrally in renderStats).
-  function rangeSegHTML() {
-    return '<div class="seg seg-mini seg-range">' + STATS_RANGES.map((r) =>
-      '<button type="button" class="' + (statsRange === r.id ? 'on' : '') + '" data-r="' + r.id + '">' +
-      r.label + '</button>').join('') + '</div>';
+  function bindChartOpts(btnId, title, groups, apply) {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.onclick = () => openOptsSheet(title, groups(), apply);
   }
 
   // Inclusive start date of the selected range; null means all time.
@@ -1837,16 +1882,6 @@
         render();
       };
     });
-    $app.querySelectorAll('.seg-range button').forEach((b) => {
-      b.onclick = () => {
-        if (statsRange === b.dataset.r) return;
-        statsRange = b.dataset.r;
-        statsSelKey = null;
-        statsPointSel = null;
-        statsCellSel = null;
-        render();
-      };
-    });
     if (statsTab === 'heatmap') bindMuscles();
     else if (statsTab === 'volume') bindVolume();
     else bindProgression();
@@ -1876,8 +1911,10 @@
 
     if (!sessions.length) {
       return '<div class="card">' +
+        '<div class="ex-opts-row">' +
         '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
-        '<div class="seg-row">' + rangeSegHTML() + '</div>' +
+        chartOptsBtn('btn-ex-opts') +
+        '</div>' +
         '<div class="empty">No sessions in this range.</div>' +
         '</div>';
     }
@@ -1889,11 +1926,9 @@
     const sel = sessions[statsPointSel];
 
     return '<div class="card">' +
+      '<div class="ex-opts-row">' +
       '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
-      '<div class="seg-row">' +
-      segHTML('seg-ex-type', EX_TYPES, statsExType) +
-      (statsExType === 'line' ? segHTML('seg-ex-mode', PLOT_MODES, statsExMode) : '') +
-      rangeSegHTML() +
+      chartOptsBtn('btn-ex-opts') +
       '</div>' +
       progressionSVG(sessions, disps, unit, statsExType, statsExMode) +
       '<div class="cell-detail">Top set <b>' + fmt1(disps[statsPointSel]) + ' ' + esc(unit) + '</b>' +
@@ -1949,6 +1984,30 @@
       '</svg>';
   }
 
+  function exOptsGroups() {
+    const gs = [{
+      label: 'Chart',
+      items: EX_TYPES.map((o) => ({ key: 'type:' + o.id, label: o.label, on: statsExType === o.id })),
+    }];
+    if (statsExType === 'line') {
+      gs.push({
+        label: 'Style',
+        items: PLOT_MODES.map((o) => ({ key: 'mode:' + o.id, label: o.label, on: statsExMode === o.id })),
+      });
+    }
+    gs.push(rangeOptsGroup());
+    return gs;
+  }
+
+  function applyExOpt(k) {
+    const kind = k.split(':')[0];
+    const val = k.slice(kind.length + 1);
+    if (kind === 'type') statsExType = val;
+    else if (kind === 'mode') statsExMode = val;
+    else if (kind === 'range') setStatsRange(val);
+    render();
+  }
+
   function bindProgression() {
     const selEl = document.getElementById('sel-ex');
     if (selEl) selEl.onchange = () => {
@@ -1956,8 +2015,7 @@
       statsPointSel = null;
       render();
     };
-    bindSeg('seg-ex-type', (v) => { statsExType = v; });
-    bindSeg('seg-ex-mode', (v) => { statsExMode = v; });
+    bindChartOpts('btn-ex-opts', 'Chart options', exOptsGroups, applyExOpt);
     $app.querySelectorAll('.pt, .pbar').forEach((el) => {
       el.onclick = () => { statsPointSel = Number(el.dataset.i); render(); };
     });
@@ -1978,8 +2036,7 @@
     if (!any) {
       return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
     }
-    const seg = '<div class="seg-row">' +
-      segHTML('seg-mus-view', MUS_VIEWS, statsMusView) + rangeSegHTML() + '</div>';
+    const seg = '<div class="opts-row">' + chartOptsBtn('btn-mus-opts') + '</div>';
     return statsMusView === 'radar'
       ? seg + radarHTML(cur, prev)
       : seg + heatHTML(buckets, monthly);
@@ -2100,8 +2157,23 @@
       '</svg>';
   }
 
+  function musOptsGroups() {
+    return [
+      { label: 'View', items: MUS_VIEWS.map((o) => ({ key: 'view:' + o.id, label: o.label, on: statsMusView === o.id })) },
+      rangeOptsGroup(),
+    ];
+  }
+
+  function applyMusOpt(k) {
+    const kind = k.split(':')[0];
+    const val = k.slice(kind.length + 1);
+    if (kind === 'view') statsMusView = val;
+    else if (kind === 'range') setStatsRange(val);
+    render();
+  }
+
   function bindMuscles() {
-    bindSeg('seg-mus-view', (v) => { statsMusView = v; });
+    bindChartOpts('btn-mus-opts', 'Chart options', musOptsGroups, applyMusOpt);
     $app.querySelectorAll('.hcell').forEach((el) => {
       el.onclick = () => {
         statsCellSel = { cat: el.dataset.cat, key: el.dataset.w };
@@ -2185,11 +2257,7 @@
       fmtVol(totalAll / buckets.length) + '</b></div>' +
       '</div>' +
       '<div class="card chart-card">' +
-      '<div class="seg-row">' +
-      segHTML('seg-vol-type', VOL_TYPES, statsVolType) +
-      (statsVolType === 'line' ? segHTML('seg-vol-mode', PLOT_MODES, statsVolMode) : '') +
-      rangeSegHTML() +
-      '</div>' +
+      '<div class="opts-row">' + chartOptsBtn('btn-vol-opts') + '</div>' +
       (statsVolType === 'bar'
         ? '<div class="chart">' + chartHTML + '</div>'
         : volumeLineSVG(buckets, monthly)) +
@@ -2248,9 +2316,32 @@
       '</svg>';
   }
 
+  function volOptsGroups() {
+    const gs = [{
+      label: 'Chart',
+      items: VOL_TYPES.map((o) => ({ key: 'type:' + o.id, label: o.label, on: statsVolType === o.id })),
+    }];
+    if (statsVolType === 'line') {
+      gs.push({
+        label: 'Style',
+        items: PLOT_MODES.map((o) => ({ key: 'mode:' + o.id, label: o.label, on: statsVolMode === o.id })),
+      });
+    }
+    gs.push(rangeOptsGroup());
+    return gs;
+  }
+
+  function applyVolOpt(k) {
+    const kind = k.split(':')[0];
+    const val = k.slice(kind.length + 1);
+    if (kind === 'type') statsVolType = val;
+    else if (kind === 'mode') statsVolMode = val;
+    else if (kind === 'range') setStatsRange(val);
+    render();
+  }
+
   function bindVolume() {
-    bindSeg('seg-vol-type', (v) => { statsVolType = v; });
-    bindSeg('seg-vol-mode', (v) => { statsVolMode = v; });
+    bindChartOpts('btn-vol-opts', 'Chart options', volOptsGroups, applyVolOpt);
     $app.querySelectorAll('.col').forEach((el) => {
       el.onclick = () => { statsSelKey = el.dataset.w; render(); };
     });
