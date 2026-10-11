@@ -1598,15 +1598,15 @@
   let statsExSel = null;       // progression tab: selected exercise name
   let statsPointSel = null;    // progression tab: selected point index
   let statsCellSel = null;     // heatmap tab: { cat, key }
-  let statsRange = '3m';       // 4w | 3m | 6m | 1y | all
+  let statsRange = '1m';       // 1m | 3m | 6m | 1y | all
   let statsExType = 'line';         // progression: line | bar
   let statsExMode = 'continuous';   // progression line: discrete | continuous
   let statsVolType = 'line';        // volume: bar | line
   let statsVolMode = 'continuous';   // volume line: discrete | continuous
-  let statsMusView = 'heat';        // muscles: heat | radar
+  let statsMusView = 'radar';       // muscles: heat | radar
 
   const STATS_RANGES = [
-    { id: '4w', label: 'Last 4 weeks' },
+    { id: '1m', label: 'Last month' },
     { id: '3m', label: 'Last 3 months' },
     { id: '6m', label: 'Last 6 months' },
     { id: '1y', label: 'Last year' },
@@ -1688,7 +1688,7 @@
     if (range === 'all') return null;
     const now = new Date();
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (range === '4w') d.setDate(d.getDate() - 28);
+    if (range === '1m') d.setMonth(d.getMonth() - 1);
     else if (range === '6m') d.setMonth(d.getMonth() - 6);
     else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
     else d.setMonth(d.getMonth() - 3);
@@ -1739,7 +1739,7 @@
   function prevRangeStart(range, start) {
     if (range === 'all' || !start) return null;
     const d = new Date(start);
-    if (range === '4w') d.setDate(d.getDate() - 28);
+    if (range === '1m') d.setMonth(d.getMonth() - 1);
     else if (range === '6m') d.setMonth(d.getMonth() - 6);
     else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
     else d.setMonth(d.getMonth() - 3);
@@ -1748,7 +1748,7 @@
 
   // Human label of a range id, for radar legends and hints.
   function rangeWord(range) {
-    if (range === '4w') return '4 weeks';
+    if (range === '1m') return 'month';
     if (range === '6m') return '6 months';
     if (range === '1y') return 'year';
     if (range === 'all') return 'period';
