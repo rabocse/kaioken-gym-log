@@ -1631,6 +1631,13 @@
     });
   }
 
+  // Range chips embedded in a chart card (bound centrally in renderStats).
+  function rangeSegHTML() {
+    return '<div class="seg seg-mini seg-range">' + STATS_RANGES.map((r) =>
+      '<button type="button" class="' + (statsRange === r.id ? 'on' : '') + '" data-r="' + r.id + '">' +
+      r.label + '</button>').join('') + '</div>';
+  }
+
   // Inclusive start date of the selected range; null means all time.
   function rangeStart(range) {
     if (range === 'all') return null;
@@ -1774,8 +1781,9 @@
     return s.reps * s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1);
   }
 
-  // All exercises with at least one valid set in completed routines,
-  // grouped by lowercase name with their best set (by Epley est. 1RM) per session.
+  // All exercises with at least one valid working set in completed
+  // routines, grouped by lowercase name with their top set (heaviest
+  // weight, warm-ups excluded, normalized to kg) per session.
   function progressionData() {
     const byName = {};
     completedRoutines().forEach((r) => {
@@ -1788,10 +1796,11 @@
         g.name = nm;
         let best = null;
         ex.sets.forEach((s) => {
+          if (s.warmup) return;
           if (s.reps == null || s.weight == null || s.reps <= 0 || s.weight <= 0) return;
-          const e = s.weight * (1 + s.reps / 30);
-          if (!best || e > best.e) {
-            best = { reps: s.reps, weight: s.weight, unit: ex.unit, e: e, rdate: r.date, ts: d ? d.getTime() : 0 };
+          const wkg = s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1);
+          if (!best || wkg > best.wkg) {
+            best = { reps: s.reps, weight: s.weight, unit: ex.unit, wkg: wkg, rdate: r.date, ts: d ? d.getTime() : 0 };
           }
         });
         if (best) g.sessions.push(best);
@@ -1818,9 +1827,6 @@
       '<div class="seg seg-tabs">' + tabs.map((t) =>
         '<button type="button" class="' + (statsTab === t.id ? 'on' : '') + '" data-t="' + t.id + '">' +
         t.label + '</button>').join('') + '</div>' +
-      '<div class="seg seg-range">' + STATS_RANGES.map((r) =>
-        '<button type="button" class="' + (statsRange === r.id ? 'on' : '') + '" data-r="' + r.id + '">' +
-        r.label + '</button>').join('') + '</div>' +
       body;
 
     document.getElementById('act-back').onclick = () => go('home');
@@ -1865,19 +1871,18 @@
     const options = names.map((n) => {
       const d = byName[n];
       return '<option value="' + esc(d.name) + '"' + (d === g ? ' selected' : '') + '>' +
-        esc(d.name) + ' \u00b7 ' + d.sessions.length +
-        (d.sessions.length === 1 ? ' session' : ' sessions') + '</option>';
+        esc(d.name) + '</option>';
     }).join('');
 
     if (!sessions.length) {
       return '<div class="card">' +
         '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
+        '<div class="seg-row">' + rangeSegHTML() + '</div>' +
         '<div class="empty">No sessions in this range.</div>' +
         '</div>';
     }
     const unit = sessions[sessions.length - 1].unit;
-    const vals = sessions.map((s) => (s.unit === 'lb' ? s.e * LB_TO_KG : s.e));
-    const disps = vals.map((v) => (unit === 'kg' ? v : v / LB_TO_KG));
+    const disps = sessions.map((s) => (unit === 'kg' ? s.wkg : s.wkg / LB_TO_KG));
     if (statsPointSel == null || statsPointSel < 0 || statsPointSel >= sessions.length) {
       statsPointSel = sessions.length - 1;
     }
@@ -1888,13 +1893,13 @@
       '<div class="seg-row">' +
       segHTML('seg-ex-type', EX_TYPES, statsExType) +
       (statsExType === 'line' ? segHTML('seg-ex-mode', PLOT_MODES, statsExMode) : '') +
+      rangeSegHTML() +
       '</div>' +
       progressionSVG(sessions, disps, unit, statsExType, statsExMode) +
-      '<div class="cell-detail">Est. 1RM <b>' + fmt1(disps[statsPointSel]) + ' ' + esc(unit) + '</b>' +
-      ' \u00b7 top set ' + sel.weight + ' ' + esc(sel.unit) + ' \u00d7 ' + sel.reps +
-      ' \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>' +
+      '<div class="cell-detail">Top set <b>' + fmt1(disps[statsPointSel]) + ' ' + esc(unit) + '</b>' +
+      ' \u00b7 ' + sel.reps + ' reps \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>' +
       '</div>' +
-      '<p class="hint">Estimated 1RM (Epley: weight \u00d7 (1 + reps/30)) of your best set per session, spaced by date. Tap a point or bar to see its top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
+      '<p class="hint">Heaviest working-set weight per session (warm-ups excluded), spaced by date. Tap a point or bar to see that session\u2019s top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
   }
 
   function progressionSVG(sessions, disps, unit, type, mode) {
@@ -1934,7 +1939,7 @@
           '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
         : '') + dots;
 
-    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Progression over sessions">' +
+    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Top set weight over time">' +
       plot +
       '<text class="lbl" x="' + lx + '" y="' + ly + '" text-anchor="middle">' +
       fmt1(disps[n - 1]) + ' ' + esc(unit) + '</text>' +
@@ -1974,7 +1979,7 @@
       return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
     }
     const seg = '<div class="seg-row">' +
-      segHTML('seg-mus-view', MUS_VIEWS, statsMusView) + '</div>';
+      segHTML('seg-mus-view', MUS_VIEWS, statsMusView) + rangeSegHTML() + '</div>';
     return statsMusView === 'radar'
       ? seg + radarHTML(cur, prev)
       : seg + heatHTML(buckets, monthly);
@@ -2183,6 +2188,7 @@
       '<div class="seg-row">' +
       segHTML('seg-vol-type', VOL_TYPES, statsVolType) +
       (statsVolType === 'line' ? segHTML('seg-vol-mode', PLOT_MODES, statsVolMode) : '') +
+      rangeSegHTML() +
       '</div>' +
       (statsVolType === 'bar'
         ? '<div class="chart">' + chartHTML + '</div>'

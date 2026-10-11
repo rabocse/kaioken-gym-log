@@ -981,10 +981,9 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
 /* ---------- stats: tabs, line chart, heatmap ---------- */
 .seg-tabs { display: flex; margin-bottom: 12px; }
 .seg-tabs button { flex: 1; min-height: 40px; }
-.seg-range { display: flex; justify-content: center; margin-bottom: 12px; }
-.seg-range button { min-height: 32px; padding: 0 12px; font-size: 12.5px; }
 .seg-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
 .seg-mini button { min-height: 28px; padding: 0 12px; font-size: 12px; }
+.seg-row .seg-range { margin-left: auto; }
 
 .sel-ex { margin-bottom: 12px; }
 
