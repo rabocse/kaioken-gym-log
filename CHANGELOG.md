@@ -6,6 +6,25 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.4.0] - 2026-10-11
+
+### Added
+- Stats rework: every graph has a time range (Last month, 3 months, 6
+  months, Last year, All time); short ranges bucket by week, long ones by
+  month.
+- Muscle radar: total volume by muscle group as a radar chart, with the
+  previous equal range overlaid dashed for comparison, alongside the
+  heatmap view.
+- Chart options sheet: one compact button per graph opens a bottom sheet
+  with chart type (Line/Bar), style (Discrete/Continuous) and range.
+
+### Changed
+- Progression now plots your top set weight per session (heaviest working
+  set, warm-ups excluded), spaced by actual date instead of session
+  count; Line + Continuous is the default for all charts.
+- Volume chart adds a line/area trend of weekly (or monthly) totals on
+  top of the stacked bars; Muscles opens on the radar.
+
 ## [1.3.1] - 2026-10-11
 
 ### Fixed
