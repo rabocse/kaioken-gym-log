@@ -673,9 +673,22 @@ input[type="date"] {
 .sum-row + .sum-row { border-top: 1px solid var(--border); }
 
 /* ---------- exercises ---------- */
-.ex-head { display: flex; gap: 8px; margin-bottom: 10px; }
-.ex-head .ex-name { flex: 1; font-weight: 600; }
-.ex-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.ex-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.ex-head .ex-name {
+  flex: 1;
+  font-weight: 700;
+  font-size: 17px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 0;
+  color: var(--text);
+}
+.ex-head .ex-name::placeholder { color: var(--muted); opacity: 0.7; }
+.ex-head .ex-name:focus { outline: none; border-bottom-color: var(--accent); }
+.ex-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ex-controls .seg button { padding: 4px 10px; font-size: 13px; min-width: 40px; }
 .muted-small { color: var(--muted); font-size: 13.5px; }
 
 /* workout focus: folded exercises hide their rows, units and add button */
@@ -717,15 +730,29 @@ input[type="date"] {
 
 .set-row {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 26px 12px minmax(0, 1fr) 32px;
-  gap: 8px;
+  grid-template-columns: 32px minmax(0, 1fr) 30px minmax(0, 1fr) 34px 32px;
+  gap: 6px;
   align-items: center;
-  margin-bottom: 8px;
-  padding: 4px;
-  border-radius: 10px;
+  margin: 0 -16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
 }
+.set-row:last-child { border-bottom: none; }
 .set-row.done { background: var(--accent-soft); }
-.set-row.cardio { grid-template-columns: 32px minmax(0, 1fr) 26px minmax(0, 1fr) 30px 32px; }
+.set-row.cardio { grid-template-columns: 32px minmax(0, 1fr) 30px minmax(0, 1fr) 30px 32px; }
+
+.set-row input {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+.set-row input::placeholder { color: var(--muted); opacity: 0.6; }
+.set-row input:focus { outline: none; }
 
 .set-check {
   width: 32px;
@@ -756,8 +783,8 @@ input[type="date"] {
 .set-check.off.pr { opacity: 1; }
 
 .set-idx { color: var(--muted); font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
-.mult { color: var(--muted); text-align: center; }
-.unit-tag { min-width: 24px; color: var(--muted); font-size: 13px; text-align: right; }
+.mult { color: var(--muted); text-align: center; font-size: 13px; }
+.unit-tag { min-width: 24px; color: var(--muted); font-size: 13px; text-align: center; }
 .btn-del-set { min-width: 34px; min-height: 40px; padding: 6px; }
 .btn-del-set svg { width: 16px; height: 16px; }
 .btn-add-set { min-height: 42px; margin-top: 4px; color: var(--muted); font-size: 15px; }

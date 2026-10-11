@@ -994,8 +994,8 @@
           // text + inputmode="decimal" always shows it.
           '<input class="in-weight" type="text" inputmode="decimal" autocomplete="off" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
           '<span class="unit-tag">' + esc(ex.unit) + '</span>' +
-          '<span class="mult">\u00d7</span>' +
-          '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">';
+          '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">' +
+          '<span class="unit-tag reps-tag">reps</span>';
       return '<div class="set-row' + (cardio ? ' cardio' : '') + (s.done ? ' done' : '') + (pr ? ' pr' : '') + '" data-sid="' + esc(s.id) + '">' +
         check + fields +
         '<button class="btn btn-icon btn-del-set" type="button" aria-label="Remove set">' + I.x + '</button>' +
