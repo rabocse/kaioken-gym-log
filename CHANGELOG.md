@@ -6,6 +6,22 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.3.0] - 2026-10-11
+
+### Added
+- Live per-exercise stats: Volume, Reps and Average weight update as you type.
+- Per-set warm-up sets: add them to the top of an exercise with the Warm up
+  button; marked with a thermometer icon and excluded from PR detection and
+  volume stats.
+
+### Changed
+- Exercise card redesigned as table-style rows: borderless weight/reps inputs
+  with visible kg/reps labels and full-bleed separators.
+- Delete buttons are now bare "x" icons; the exercise delete is bigger/bolder
+  than the per-set delete.
+- kg/lb unit toggle moved onto the exercise-name line to save vertical space.
+- "+ Add Set" is now a right-aligned "+" icon button.
+
 ## [1.2.0] - 2026-09-29
 
 ### Added
