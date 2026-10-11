@@ -1566,11 +1566,18 @@
 
       const warmupBtn = card.querySelector('.btn-warmup');
       if (warmupBtn) warmupBtn.onclick = () => {
+        let lastWarm = -1;
+        ex.sets.forEach((s, i) => { if (s.warmup) lastWarm = i; });
+        const last = lastWarm >= 0 ? ex.sets[lastWarm] : null;
+        const next = { id: uid(), done: false, warmup: true };
         if (isCardioEx(ex)) {
-          ex.sets.unshift({ id: uid(), mins: null, dist: null, done: false, warmup: true });
+          next.mins = last ? last.mins : null;
+          next.dist = last ? last.dist : null;
         } else {
-          ex.sets.unshift({ id: uid(), reps: null, weight: null, done: false, warmup: true });
+          next.reps = last ? last.reps : null;
+          next.weight = last ? last.weight : null;
         }
+        ex.sets.splice(lastWarm + 1, 0, next);
         scheduleSave(r, true);
         render();
       };
