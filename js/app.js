@@ -956,6 +956,35 @@
     return n;
   }
 
+  function fmtStat(value, unit) {
+    if (value == null || value === 0) return '\u2013';
+    let s;
+    if (typeof value === 'number' && !Number.isInteger(value)) {
+      s = value.toFixed(1).replace(/\.0$/, '');
+    } else {
+      s = String(value);
+    }
+    return unit ? s + ' ' + unit : s;
+  }
+
+  function exerciseStats(ex) {
+    const complete = ex.sets.filter((s) =>
+      !s.warmup && s.weight != null && s.reps != null && s.weight > 0 && s.reps > 0);
+    const reps = complete.reduce((sum, s) => sum + (s.reps || 0), 0);
+    const volume = complete.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0);
+    const avg = reps > 0 ? volume / reps : 0;
+    return { reps, volume, avg };
+  }
+
+  function exerciseStatsHTML(ex) {
+    const { reps, volume, avg } = exerciseStats(ex);
+    return '<div class="ex-stats">' +
+      '<span>Volume <b>' + fmtStat(volume || null, ex.unit) + '</b></span>' +
+      '<span>Reps <b>' + fmtStat(reps || null, '') + '</b></span>' +
+      '<span>Avg <b>' + fmtStat(avg > 0 ? avg : null, ex.unit) + '</b></span>' +
+      '</div>';
+  }
+
   function exerciseCardHTML(ex, editable, active) {
     const cardio = isCardioEx(ex);
     if (!editable) {
@@ -1053,6 +1082,7 @@
       '</span>' +
       '</div>' +
       rows +
+      (cardio ? '' : exerciseStatsHTML(ex)) +
       '<button class="btn btn-icon btn-add-set" type="button" aria-label="Add set">' + I.plus + '</button>' +
       '</div>';
   }
@@ -1434,6 +1464,19 @@
         });
       };
 
+      const updateExStats = () => {
+        if (isCardioEx(ex)) return;
+        const line = card.querySelector('.ex-stats');
+        if (!line) return;
+        const { reps, volume, avg } = exerciseStats(ex);
+        const vals = line.querySelectorAll('b');
+        if (vals.length === 3) {
+          vals[0].textContent = fmtStat(volume || null, ex.unit);
+          vals[1].textContent = fmtStat(reps || null, '');
+          vals[2].textContent = fmtStat(avg > 0 ? avg : null, ex.unit);
+        }
+      };
+
       card.querySelectorAll('.set-row').forEach((row) => {
         const set = ex.sets.find((s) => s.id === row.dataset.sid);
         if (!set) return;
@@ -1463,11 +1506,13 @@
             set.reps = numOrNull(repsIn.value);
             scheduleSave(r);
             applyCardPR();
+            updateExStats();
           });
           wtIn.addEventListener('input', () => {
             set.weight = numOrNull(wtIn.value);
             scheduleSave(r);
             applyCardPR();
+            updateExStats();
           });
           wtIn.addEventListener('blur', () => {
             const n = numOrNull(wtIn.value);
@@ -1495,6 +1540,7 @@
           };
         }
       });
+      updateExStats();
 
       card.querySelector('.btn-del-ex').onclick = () => {
         if (ex.sets.length && !confirm('Remove "' + (ex.name || 'this exercise') + '" and its sets?')) return;

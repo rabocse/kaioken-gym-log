@@ -815,7 +815,41 @@ input[type="date"] {
 .ex-head .btn-del-ex:hover { color: var(--danger); }
 .btn-add-set { margin-left: auto; margin-top: 8px; color: var(--muted); }
 .btn-add-set:hover { color: var(--accent); }
+.btn-add-set { margin-left: auto; margin-top: 8px; color: var(--muted); }
+.btn-add-set:hover { color: var(--accent); }
 .btn-warmup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  min-height: 30px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.btn-warmup svg { width: 14px; height: 14px; }
+.set-check.warm, .set-idx.warm { color: #fb923c; border-color: rgba(251, 146, 60, 0.5); }
+.ex-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ex-stats span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.ex-stats b {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
   display: inline-flex;
   align-items: center;
   gap: 6px;
