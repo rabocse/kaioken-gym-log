@@ -120,6 +120,7 @@
     stop: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
     check: '<svg ' + A + '><path d="M20 6L9 17l-5-5"/></svg>',
     flame: '<svg ' + A + '><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',
+    thermo: '<svg ' + A + '><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0z"/></svg>',
     gear: '<svg ' + A + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     x: '<svg ' + A + '><path d="M6 6l12 12M18 6L6 18"/></svg>',
     chart: '<svg ' + A + '><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
@@ -933,6 +934,7 @@
     routines.forEach((r) => r.exercises.forEach((ex) => {
       if (String(ex.name || '').trim().toLowerCase() !== key) return;
       ex.sets.forEach((s) => {
+        if (s.warmup) return;
         if (s === excludeSet) return;
         const e = epleyKg(ex, s);
         if (e > best) best = e;
@@ -942,20 +944,32 @@
   }
 
   const isRecordSet = (ex, s) => {
+    if (s.warmup) return false;
     const e = epleyKg(ex, s);
     return e > 0 && e > bestEpleyByName(ex.name, s) + 1e-9;
   };
+
+  function workSetNumber(sets, idx) {
+    if (sets[idx].warmup) return null;
+    let n = 0;
+    for (let i = 0; i <= idx; i++) if (!sets[i].warmup) n++;
+    return n;
+  }
 
   function exerciseCardHTML(ex, editable, active) {
     const cardio = isCardioEx(ex);
     if (!editable) {
       const lines = ex.sets.map((s, j) => {
         const pr = isRecordSet(ex, s);
+        const warmup = s.warmup === true;
+        const workN = workSetNumber(ex.sets, j);
         const lead = (pr
           ? '<span class="done-check">' + I.flame + '</span>'
           : (s.done
             ? '<span class="done-check">' + I.check + '</span>'
-            : '<span class="set-idx">' + (j + 1) + '</span>'));
+            : (warmup
+              ? '<span class="set-idx warm">' + I.thermo + '</span>'
+              : '<span class="set-idx">' + workN + '</span>')));
         const body = cardio
           ? '<span>' + (s.mins == null ? '\u2013' : s.mins) + ' min</span>' +
             '<span class="mult">\u00b7</span>' +
@@ -975,15 +989,17 @@
 
     const rows = ex.sets.map((s, j) => {
       const pr = isRecordSet(ex, s);
+      const warmup = s.warmup === true;
+      const workN = workSetNumber(ex.sets, j);
       let check;
       if (active) {
-        check = '<button class="set-check' + (s.done ? ' on' : '') + (pr ? ' pr' : '') +
+        check = '<button class="set-check' + (s.done ? ' on' : '') + (pr ? ' pr' : '') + (warmup ? ' warm' : '') +
           '" type="button" aria-label="' +
-          (s.done ? 'Mark set as not done' : 'Mark set as done') + '">' +
-          (pr ? I.flame : (s.done ? I.check : String(j + 1))) + '</button>';
+          (warmup ? 'Warm-up set' : (s.done ? 'Mark set as not done' : 'Mark set as done')) + '">' +
+          (pr ? I.flame : (s.done ? I.check : (warmup ? I.thermo : String(workN)))) + '</button>';
       } else {
-        check = '<span class="set-check off' + (pr ? ' pr' : '') + '">' +
-          (pr ? I.flame : (j + 1)) + '</span>';
+        check = '<span class="set-check off' + (pr ? ' pr' : '') + (warmup ? ' warm' : '') + '">' +
+          (pr ? I.flame : (s.done ? I.check : (warmup ? I.thermo : workN))) + '</span>';
       }
       const fields = cardio
         ? '<input class="in-mins" type="text" inputmode="decimal" autocomplete="off" placeholder="min" value="' + (s.mins == null ? '' : s.mins) + '">' +
@@ -1030,6 +1046,7 @@
       '</div>' +
       '<div class="sug-box" hidden></div>' +
       '<div class="ex-controls">' +
+      '<button class="btn btn-ghost btn-warmup" type="button" aria-label="Add warm-up set">' + I.plus + '<span>Warm up</span></button>' +
       '<span class="ex-meta">' +
       '<span class="cat-tag">' + esc(gymlogCategoryOf(ex.name)) + '</span>' +
       '<span class="muted-small">' + meta + '</span>' +
@@ -1053,10 +1070,10 @@
       }
     }
     render();
-    if (set.done && r.status === 'active') {
+    if (set.done && r.status === 'active' && !set.warmup) {
       const e = epleyKg(ex, set);
       if (e > 0 && e > bestEpleyByName(ex.name, set) + 1e-9) {
-        toast('New PR: ' + set.weight + ' ' + ex.unit + ' \u00d7 ' + set.reps);
+        toast('New PR: ' + set.weight + ' ' + ex.unit + ' × ' + set.reps);
       }
       const anyLeft = r.exercises.some((x) => x.sets.some((s) => !s.done));
       if (anyLeft) startRest();
@@ -1497,6 +1514,17 @@
           next.weight = last ? last.weight : null;
         }
         ex.sets.push(next);
+        scheduleSave(r, true);
+        render();
+      };
+
+      const warmupBtn = card.querySelector('.btn-warmup');
+      if (warmupBtn) warmupBtn.onclick = () => {
+        if (isCardioEx(ex)) {
+          ex.sets.unshift({ id: uid(), mins: null, dist: null, done: false, warmup: true });
+        } else {
+          ex.sets.unshift({ id: uid(), reps: null, weight: null, done: false, warmup: true });
+        }
         scheduleSave(r, true);
         render();
       };

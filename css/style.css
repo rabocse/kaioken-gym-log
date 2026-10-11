@@ -689,7 +689,7 @@ input[type="date"] {
 .ex-head .ex-name:focus { outline: none; border-bottom-color: var(--accent); }
 .ex-head .seg { flex: none; }
 .ex-head .seg button { padding: 3px 8px; font-size: 12px; min-width: 34px; min-height: 30px; }
-.ex-controls { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 8px; }
+.ex-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .ex-controls .seg button { padding: 4px 10px; font-size: 13px; min-width: 40px; }
 .muted-small { color: var(--muted); font-size: 13.5px; }
 
@@ -814,6 +814,17 @@ input[type="date"] {
 .ex-head .btn-del-ex svg { width: 22px; height: 22px; stroke-width: 2.75; }
 .ex-head .btn-del-ex:hover { color: var(--danger); }
 .btn-add-set { min-height: 42px; margin-top: 4px; color: var(--muted); font-size: 15px; }
+.btn-warmup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  min-height: 30px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.btn-warmup svg { width: 14px; height: 14px; }
+.set-check.warm, .set-idx.warm { color: #fb923c; border-color: rgba(251, 146, 60, 0.5); }
 
 .ex-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 600; font-size: 16.5px; }
 .ex-title .unit-tag {
