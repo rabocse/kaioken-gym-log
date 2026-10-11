@@ -1053,7 +1053,7 @@
       '</span>' +
       '</div>' +
       rows +
-      '<button class="btn btn-ghost btn-block btn-add-set" type="button">+ Add Set</button>' +
+      '<button class="btn btn-icon btn-add-set" type="button" aria-label="Add set">' + I.plus + '</button>' +
       '</div>';
   }
   // Mark a set done / not done. Tapping a row toggles too, except on the

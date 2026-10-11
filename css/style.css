@@ -813,7 +813,8 @@ input[type="date"] {
 }
 .ex-head .btn-del-ex svg { width: 22px; height: 22px; stroke-width: 2.75; }
 .ex-head .btn-del-ex:hover { color: var(--danger); }
-.btn-add-set { min-height: 42px; margin-top: 4px; color: var(--muted); font-size: 15px; }
+.btn-add-set { margin-left: auto; margin-top: 8px; color: var(--muted); }
+.btn-add-set:hover { color: var(--accent); }
 .btn-warmup {
   display: inline-flex;
   align-items: center;
