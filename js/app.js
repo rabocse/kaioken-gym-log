@@ -373,6 +373,22 @@
     if (t) { clearTimeout(t); saveTimers.delete(id); }
   }
 
+  // iOS can kill a backgrounded PWA without firing pending debounce timers:
+  // flush queued saves the moment the app is hidden or closed, so the last
+  // edits survive instead of dying with the timer.
+  function flushPendingSaves() {
+    saveTimers.forEach((t, id) => {
+      clearTimeout(t);
+      saveTimers.delete(id);
+      const r = getRoutine(id);
+      if (r) persist(r);
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') flushPendingSaves();
+  });
+  window.addEventListener('pagehide', flushPendingSaves);
+
   function go(name, extra) {
     view = extra ? Object.assign({ name }, extra) : { name };
     render();
