@@ -145,6 +145,19 @@
     return starts.concat(contains).slice(0, 6);
   }
 
+  // Canonical catalog name for a typed value (case-insensitive exact match),
+  // or null - exercise names are restricted to catalog entries, so typos
+  // like "bice" can never be written to the log. Existing history keeps its
+  // saved names.
+  function catalogNameOf(v) {
+    const n = String(v || '').trim().toLowerCase();
+    if (!n) return null;
+    for (let i = 0; i < GYMLOG_EX_NAMES.length; i++) {
+      if (GYMLOG_EX_NAMES[i].toLowerCase() === n) return GYMLOG_EX_NAMES[i];
+    }
+    return null;
+  }
+
   function updateSuggestions(box, input, names, onPick) {
     if (!box) return;
     const matches = suggestMatches(input.value, names);
@@ -1332,7 +1345,7 @@
       (exCards || '<div class="empty">No exercises yet. Add your first one below.</div>') +
       (editable ? '<button class="btn btn-ghost btn-block" id="act-add-ex" type="button">+ Add Exercise</button>' : '') +
       (editable && r.exercises.length > 1
-        ? '<p class="hint">Hold an exercise and drag to put your exercises in order.</p>'
+        ? '<p class="hint">Hold an exercise and drag to put your exercises in order. Names come from the built-in catalog - type to search and tap a suggestion.</p>'
         : '') +
       '<div class="spacer"></div>';
 
@@ -1425,7 +1438,11 @@
         if ((gymlogCategoryOf(nm) === 'Cardio') !== (card.dataset.cardio === '1')) render();
       });
       nameIn.addEventListener('input', () => {
-        ex.name = nameIn.value;
+        const canon = catalogNameOf(nameIn.value);
+        if (canon) {
+          ex.name = canon;
+          nameIn.value = canon;
+        }
         const tag = card.querySelector('.cat-tag');
         if (tag) tag.textContent = gymlogCategoryOf(ex.name);
         scheduleSave(r);
@@ -1433,6 +1450,15 @@
       nameIn.addEventListener('blur', () => {
         // delayed so a tap on an autocomplete suggestion lands first
         setTimeout(() => {
+          const t = nameIn.value.trim();
+          const canon = catalogNameOf(t);
+          if (canon) {
+            ex.name = canon;
+            nameIn.value = canon;
+          } else if (t !== ex.name) {
+            nameIn.value = ex.name;
+            if (t) toast('Pick an exercise from the list');
+          }
           if (isCardioEx(ex) !== (card.dataset.cardio === '1')) render();
         }, 150);
       });
