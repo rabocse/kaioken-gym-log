@@ -6,6 +6,18 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.5.0] - 2026-10-14
+
+### Added
+- Exercise catalog expanded from 95 to 257 entries: cable and rope
+  attachment exercises, machines and Smith/landmine variants, kettlebell
+  and bodyweight staples, and more cardio options.
+- Exercise names are now restricted to catalog entries: typing filters the
+  catalog, and the name must be picked from the suggestions or typed as an
+  exact (case-insensitive) match - typos like "bice" revert with a hint
+  toast instead of being written to the log. Saved history keeps its
+  existing names.
+
 ## [1.4.1] - 2026-10-12
 
 ### Fixed
