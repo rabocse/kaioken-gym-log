@@ -1,10 +1,11 @@
 # Changelog
 
 All notable changes to Kaioken are documented here. Versions follow
-[semver](https://semver.org/). The version lives in three places that are
-bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
-the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
-Each release is tagged on main (`v1.1.0`, ...).
+[semver](https://semver.org/). The version lives in two places that are
+bumped together on release: `APP_VERSION` (js/app.js, shown in Settings)
+and the manifest (manifest.webmanifest). The service worker derives its
+cache name from the manifest's version on install, so the cache can never
+drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
 ## [1.6.0] - 2026-10-14
 
