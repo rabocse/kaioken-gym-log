@@ -21,8 +21,21 @@
           db.createObjectStore('settings', { keyPath: 'key' });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        // Another context upgraded the database: this connection turns
+        // stale and every later write on it fails - drop the cached
+        // promise so the next store operation reopens a fresh one.
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
+      req.onerror = () => {
+        dbPromise = null;
+        reject(req.error);
+      };
     });
     return dbPromise;
   }
@@ -348,7 +361,31 @@
   // never be written back - the delete's store.del has already landed.
   function persist(r) {
     if (routines.indexOf(r) === -1) return;
-    store.put(r).catch((e) => console.error('Kaioken: save failed', e));
+    store.put(r)
+      .then(() => hideSaveWarn())
+      .catch((e) => {
+        console.error('Kaioken: save failed', e);
+        showSaveWarn();
+      });
+  }
+
+  // A failed write must not stay a console-only secret: the user keeps
+  // typing into a session that would not survive a reload. The banner
+  // clears itself on the next successful save.
+  function showSaveWarn() {
+    if (document.getElementById('save-warn')) return;
+    const el = document.createElement('div');
+    el.id = 'save-warn';
+    el.setAttribute('role', 'alert');
+    el.innerHTML = 'Saving failed \u2014 your edits are not being stored. ' +
+      '<button type="button" id="save-warn-reload">Reload the app</button>';
+    document.body.appendChild(el);
+    document.getElementById('save-warn-reload').onclick = () => location.reload();
+  }
+
+  function hideSaveWarn() {
+    const el = document.getElementById('save-warn');
+    if (el) el.remove();
   }
 
   // Saves soon after typing stops, or immediately for structural changes.

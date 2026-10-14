@@ -700,6 +700,26 @@ input[type="date"] {
 .ex-card:not(.folded) .btn-fold svg { transform: rotate(90deg); }
 
 /* drag-reorder: the hidden original marks the drop slot, the clone follows */
+#save-warn {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 10px 16px;
+  background: var(--danger);
+  color: #16181d;
+  font-size: 14px;
+  text-align: center;
+}
+#save-warn button {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .ex-card { -webkit-touch-callout: none; }
 .ex-card.drag-src, .home-sec.drag-src { visibility: hidden; }
 .home-sec { -webkit-touch-callout: none; padding: 2px 0; }
