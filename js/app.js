@@ -441,6 +441,7 @@
 
   function render() {
     stopTimer();
+    bestEpleyCache.clear();
     document.querySelectorAll('#actionbar').forEach((n) => n.remove());
     document.body.classList.remove('has-bar');
     document.body.classList.remove('has-bar2');
@@ -1045,20 +1046,33 @@
     return w * (1 + s.reps / 30);
   }
 
+  // Per-name best estimated 1RM cache, so keystrokes do not rescan the
+  // full log: the entry keeps the best value with its set and the best
+  // value over the other sets, which is all the excluded-set question
+  // needs. Cleared on every render (structure changes) and dropped for one
+  // name while that exercise's own values are being edited.
+  const bestEpleyCache = new Map();
+
   function bestEpleyByName(name, excludeSet) {
     const key = String(name || '').trim().toLowerCase();
     if (!key) return 0;
-    let best = 0;
-    routines.forEach((r) => r.exercises.forEach((ex) => {
-      if (String(ex.name || '').trim().toLowerCase() !== key) return;
-      ex.sets.forEach((s) => {
-        if (s.warmup) return;
-        if (s === excludeSet) return;
-        const e = epleyKg(ex, s);
-        if (e > best) best = e;
-      });
-    }));
-    return best;
+    if (!bestEpleyCache.has(key)) {
+      let b1 = 0;
+      let b2 = 0;
+      let s1 = null;
+      routines.forEach((r) => r.exercises.forEach((ex) => {
+        if (String(ex.name || '').trim().toLowerCase() !== key) return;
+        ex.sets.forEach((s) => {
+          if (s.warmup) return;
+          const e = epleyKg(ex, s);
+          if (e > b1) { b2 = b1; b1 = e; s1 = s; }
+          else if (e > b2) { b2 = e; }
+        });
+      }));
+      bestEpleyCache.set(key, { b1: b1, b2: b2, s1: s1 });
+    }
+    const top = bestEpleyCache.get(key);
+    return (excludeSet && excludeSet === top.s1) ? top.b2 : top.b1;
   }
 
   const isRecordSet = (ex, s) => {
@@ -1575,7 +1589,11 @@
           const cur = cardioNow ? (ex.dunit || 'km') : ex.unit;
           if (cur === b.dataset.u) return;
           if (cardioNow) ex.dunit = b.dataset.u;
-          else ex.unit = b.dataset.u;
+          else {
+            ex.unit = b.dataset.u;
+            // the unit changes every epley value for this name - rescan it
+            bestEpleyCache.delete(String(ex.name || '').trim().toLowerCase());
+          }
           card.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b));
           if (cardioNow) {
             card.querySelectorAll('.dunit-tag').forEach((t) => (t.textContent = ex.dunit));
@@ -1591,6 +1609,8 @@
       // typing - and loses it again as soon as it no longer beats the rest.
       const applyCardPR = () => {
         if (isCardioEx(ex)) return;
+        // only this exercise's values changed - rescan just its name
+        bestEpleyCache.delete(String(ex.name || '').trim().toLowerCase());
         const rows = Array.prototype.slice.call(card.querySelectorAll('.set-row'));
         rows.forEach((rw) => {
           const idx = rows.indexOf(rw);
