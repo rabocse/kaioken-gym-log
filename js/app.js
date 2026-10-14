@@ -1518,7 +1518,9 @@
       // typing - and loses it again as soon as it no longer beats the rest.
       const applyCardPR = () => {
         if (isCardioEx(ex)) return;
-        card.querySelectorAll('.set-row').forEach((rw) => {
+        const rows = Array.prototype.slice.call(card.querySelectorAll('.set-row'));
+        rows.forEach((rw) => {
+          const idx = rows.indexOf(rw);
           const st = ex.sets.find((x) => x.id === rw.dataset.sid);
           if (!st) return;
           const pr = isRecordSet(ex, st);
@@ -1527,8 +1529,8 @@
             chk.classList.toggle('pr', pr);
             if (pr) chk.innerHTML = I.flame;
             else if (st.done) chk.innerHTML = I.check;
-            else chk.innerHTML = String(Array.prototype.indexOf.call(
-              card.querySelectorAll('.set-row'), rw) + 1);
+            else if (st.warmup) chk.innerHTML = I.thermo;
+            else chk.innerHTML = String(workSetNumber(ex.sets, idx));
           }
           rw.classList.toggle('pr', pr);
         });
@@ -1892,7 +1894,11 @@
       .sort((a, b) => (a.endedAt || 0) - (b.endedAt || 0));
   }
 
+  // Warm-up sets build no volume stats (same rule as the per-exercise live
+  // stats and the progression chart) - setVolumeKg is the single choke point
+  // behind the radar, the heatmap, the Volume tab and the home pin.
   function setVolumeKg(ex, s) {
+    if (s.warmup) return 0;
     if (s.reps == null || s.weight == null) return 0;
     return s.reps * s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1);
   }
