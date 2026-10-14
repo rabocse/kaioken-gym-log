@@ -1903,12 +1903,23 @@
 
   function statsProgressionHTML() {
     const byName = progressionData();
-    const names = Object.keys(byName).sort((a, b) => a.localeCompare(b));
+    // Cardio exercises log minutes and distance instead of weight, so they
+    // have no top set to plot: only exercises with at least one valid
+    // working set are listed.
+    const names = Object.keys(byName)
+      .filter((k) => byName[k].sessions.length)
+      .sort((a, b) => a.localeCompare(b));
     if (!names.length) {
-      return '<div class="card"><div class="empty">No completed workouts yet.</div></div>';
+      return '<div class="card"><div class="empty">' +
+        (Object.keys(byName).length
+          ? 'No weight exercises in your history yet.'
+          : 'No completed workouts yet.') +
+        '</div></div>';
     }
     const selKey = String(statsExSel || '').toLowerCase();
-    if (!selKey || !byName[selKey]) statsExSel = byName[names[0]].name;
+    if (!selKey || !byName[selKey] || !byName[selKey].sessions.length) {
+      statsExSel = byName[names[0]].name;
+    }
     const g = byName[String(statsExSel).toLowerCase()];
     const start = rangeStart(statsRange);
     const sessions = start
