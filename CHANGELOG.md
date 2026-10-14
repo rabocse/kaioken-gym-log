@@ -7,6 +7,28 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.6.1] - 2026-10-14
+
+### Fixed
+- Data safety: deleting a routine also cancels its pending debounced save
+  (a deleted routine can no longer resurrect on reload); queued saves are
+  flushed when the app is hidden or closed; a stale database connection
+  (another tab upgraded it) reopens automatically; and failed writes show
+  a banner instead of failing silently.
+- Stats: warm-up sets are excluded from the muscle radar, heatmap and
+  Volume totals (previously only the per-exercise stats excluded them);
+  the live PR refresh numbers sets exactly like the static render
+  (thermometer for warm-ups, working-set count otherwise).
+- Inputs: ambiguous numbers ("1,234", "1.234,5") and negatives are
+  rejected instead of silently parsed as 1.234 or counted as positive
+  volume.
+- Service worker: the offline cache refresh is chained into the worker's
+  lifetime (no more lost background cache writes), and the cache name is
+  derived from the manifest version on install - one source of truth, no
+  more hand-synced cache constant.
+- Performance: keystrokes re-evaluate the PR flame against a per-exercise
+  cache instead of rescanning the entire history.
+
 ## [1.6.0] - 2026-10-14
 
 ### Added
