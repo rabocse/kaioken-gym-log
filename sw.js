@@ -5,7 +5,7 @@
 // offline fallback. The precache on install makes the app usable offline
 // from the first visit.
 
-const CACHE = 'kaioken-1.5.0';
+const CACHE = 'kaioken-1.6.0';
 const ASSETS = [
   './',
   './index.html',

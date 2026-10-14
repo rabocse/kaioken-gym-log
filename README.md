@@ -38,6 +38,11 @@ No App Store, no account, no server — your data stays on your phone.
     heatmap
   - Volume: weekly (or monthly) totals as stacked bars by muscle group or
     a line/area trend; tap a column or point for the breakdown
+- Pin any chart to Home from its options sheet: it stays interactive
+  there, its options sheet edits and persists the pin, and tapping its
+  title opens Stats on that graph
+- Every home section (calendar, pinned chart, New Routine, Active,
+  Scheduled, History) is hold-and-drag reorderable; the layout persists
 - Repeat or delete past workouts by holding them (or right-clicking): long-press action sheet
 - History of completed routines grouped by month (collapsible); past workouts are dimmed
 - Home: a compact last-7-days calendar strip with a dot on each day you finished a workout (the same 7 days the Kaioken theme watches); tap it to unfold the full month

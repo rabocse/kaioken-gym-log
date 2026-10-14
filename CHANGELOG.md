@@ -6,6 +6,17 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.6.0] - 2026-10-14
+
+### Added
+- Pin one chart to Home from its options sheet (chart, style and range are
+  part of the pin): the home copy is fully interactive, its own options
+  sheet edits and persists the pin, and tapping its title opens Stats on
+  that graph.
+- Every home section (calendar, pinned chart, New Routine, Active,
+  Scheduled, History) is hold-and-drag reorderable like exercise cards;
+  the layout persists in Settings.
+
 ## [1.5.0] - 2026-10-14
 
 ### Added
