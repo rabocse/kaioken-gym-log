@@ -344,7 +344,10 @@
 
   function getRoutine(id) { return routines.find((r) => r.id === id); }
 
+  // A save queued for a routine that was deleted from memory meanwhile must
+  // never be written back - the delete's store.del has already landed.
   function persist(r) {
+    if (routines.indexOf(r) === -1) return;
     store.put(r).catch((e) => console.error('Kaioken: save failed', e));
   }
 
@@ -361,6 +364,13 @@
       saveTimers.delete(r.id);
       persist(r);
     }, 400));
+  }
+
+  // Deleting a routine drops its pending debounced save too, or the queued
+  // persist() would fire after store.del() and resurrect the routine.
+  function cancelPendingSave(id) {
+    const t = saveTimers.get(id);
+    if (t) { clearTimeout(t); saveTimers.delete(id); }
   }
 
   function go(name, extra) {
@@ -510,6 +520,7 @@
     document.getElementById('sheet-del').onclick = guard(() => {
       if (!confirm('Delete "' + r.name + '"? This cannot be undone.')) return;
       closeSheet();
+      cancelPendingSave(r.id);
       store.del(r.id).catch((e) => console.error('Kaioken:', e));
       routines = routines.filter((x) => x.id !== r.id);
       render();
@@ -1408,6 +1419,7 @@
     document.getElementById('act-del').onclick = () => {
       if (!confirm('Delete this routine? This cannot be undone.')) return;
       stopRest();
+      cancelPendingSave(r.id);
       store.del(r.id).catch((e) => console.error(e));
       routines = routines.filter((x) => x.id !== r.id);
       stopTimer();
