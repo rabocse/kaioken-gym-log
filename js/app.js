@@ -73,11 +73,19 @@
     : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
   // Locale-tolerant number parsing: accepts "22.5" and "22,5" (comma
-  // locales), so decimal weights typed on any keypad parse correctly.
+  // locales). Ambiguous input is rejected instead of silently misparsed:
+  // mixed separators ("1.234,5"), thousands-style groups ("1,234" would
+  // become 1.234) and negatives ("−100 × −5" would count as +500 volume)
+  // all come back null, i.e. treated as an empty field.
   const numOrNull = (v) => {
     if (v === '' || v == null) return null;
-    const n = parseFloat(String(v).trim().replace(',', '.'));
-    return Number.isFinite(n) ? n : null;
+    const t = String(v).trim();
+    const seps = (t.match(/[.,]/g) || []).length;
+    if (seps > 1) return null;
+    if (seps === 1 && /^\d+,\d{3}$/.test(t)) return null;
+    const n = parseFloat(t.replace(',', '.'));
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n;
   };
 
   function todayISO() {
