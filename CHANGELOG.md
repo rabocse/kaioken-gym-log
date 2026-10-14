@@ -6,6 +6,15 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 the service-worker cache name (sw.js), and the manifest (manifest.webmanifest).
 Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.4.1] - 2026-10-12
+
+### Fixed
+- Routine long-press sheet gains a Rename option (pencil icon), working on
+  scheduled and completed routines alike.
+- Stats > Progression: cardio exercises no longer appear in the exercise
+  dropdown - they log minutes and distance instead of weight, so their
+  chart was empty; a clear message shows if no weight exercises exist yet.
+
 ## [1.4.0] - 2026-10-11
 
 ### Added
