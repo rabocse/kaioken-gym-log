@@ -1430,6 +1430,7 @@
           mins: s.mins,
           dist: s.dist,
           done: false,
+          warmup: s.warmup === true,
         })),
       })),
     };
@@ -2786,6 +2787,7 @@
         s.mins = toNum(s.mins);
         s.dist = toNum(s.dist);
         s.done = s.done === true;
+        s.warmup = s.warmup === true;
       });
     });
     return r;
