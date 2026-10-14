@@ -701,7 +701,9 @@ input[type="date"] {
 
 /* drag-reorder: the hidden original marks the drop slot, the clone follows */
 .ex-card { -webkit-touch-callout: none; }
-.ex-card.drag-src { visibility: hidden; }
+.ex-card.drag-src, .home-sec.drag-src { visibility: hidden; }
+.home-sec { -webkit-touch-callout: none; padding: 2px 0; }
+.home-sec.drag-ghost { max-height: 34vh; overflow: hidden; }
 .drag-ghost {
   position: fixed;
   z-index: 90;
@@ -712,6 +714,25 @@ input[type="date"] {
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
   transform: scale(1.02);
 }
+
+.chart-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.chart-title {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.chart-title:hover { color: var(--accent); }
+.home-chart .cell-detail { padding-top: 2px; }
 
 .seg { display: inline-flex; overflow: hidden; background: var(--card2); border: 1px solid var(--border); border-radius: 10px; }
 .seg button {

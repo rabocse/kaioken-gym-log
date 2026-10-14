@@ -189,7 +189,7 @@
   let routines = [];
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg' };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', homeChart: null, homeOrder: null };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -808,6 +808,19 @@
       (calOpen ? monthGridHTML(calDays) : '') +
       '</div>';
 
+    // Every home block is a hold-and-drag section: the calendar, the pinned
+    // chart, the new-routine button, the active/scheduled lists and the
+    // history block; the order persists in the settings store.
+    const secs = {
+      cal: calHTML,
+      chart: settings.homeChart ? homeChartHTML() : '',
+      new: '<button class="btn btn-primary btn-block btn-new" id="act-new">' + I.plus + '<span>New Routine</span></button>',
+      active: sectionHTML('Active', active.map((r) => itemHTML(r, today)), ''),
+      scheduled: sectionHTML('Scheduled', scheduled.map((r) => itemHTML(r, today)), ''),
+      history: historyHTML,
+    };
+    const order = homeOrderOrDefault().filter((id) => secs[id]);
+
     $app.innerHTML =
       '<header class="topbar"><h1>Kaioken</h1>' +
       (settings.theme === 'kaioken'
@@ -816,11 +829,8 @@
       '<button class="btn btn-icon" id="act-stats" aria-label="Volume charts">' + I.chart + '</button>' +
       '<button class="btn btn-icon" id="act-settings" aria-label="Settings">' + I.gear + '</button></header>' +
       installHint() +
-      calHTML +
-      '<button class="btn btn-primary btn-block btn-new" id="act-new">' + I.plus + '<span>New Routine</span></button>' +
-      sectionHTML('Active', active.map((r) => itemHTML(r, today)), '') +
-      sectionHTML('Scheduled', scheduled.map((r) => itemHTML(r, today)), '') +
-      historyHTML;
+      order.map((id) =>
+        '<div class="home-sec" data-sec="' + id + '">' + secs[id] + '</div>').join('');
 
     document.getElementById('cal-toggle').onclick = (ev) => {
       // the month area navigates; only the strip/chevron toggles the fold
@@ -857,6 +867,18 @@
     $app.querySelectorAll('.item.hist').forEach((el) => {
       const r = getRoutine(el.dataset.id);
       if (r) attachLongPress(el, r);
+    });
+    if (settings.homeChart) bindHomeChart();
+    $app.querySelectorAll('.home-sec').forEach((sec) => {
+      attachHoldDrag(sec, {
+        siblings: '.home-sec',
+        interactive: 'input, button, textarea, select, .sug, .sug-box, svg',
+        onEnd: (els) => {
+          settings.homeOrder = els.map((s) => s.dataset.sec).filter(Boolean);
+          store.setSetting('homeOrder', settings.homeOrder)
+            .catch((e) => console.error('Kaioken:', e));
+        },
+      });
     });
   }
 
@@ -1134,17 +1156,18 @@
     }
   }
 
-  // Reorder exercises: press-and-hold a card (~0.5s, same gesture as the
-  // history long-press), then drag it - a ghost follows the finger while the
-  // hidden original marks the drop slot. Release to drop and save. Presses
-  // that start on inputs/buttons never begin a drag, and a real move before
-  // the hold fires cancels it, so scrolling and editing still work.
+  // Hold-and-drag reorder, shared by exercise cards and home sections:
+  // press-and-hold (~0.5s, same gesture as the history long-press), then
+  // drag - a ghost follows the finger while the hidden original marks the
+  // drop slot. Release to drop; onEnd receives the final DOM order to
+  // persist. Presses that start on interactive elements never begin a drag,
+  // and a real move before the hold fires cancels it, so scrolling and
+  // editing still work.
   let exDragActive = false;
 
-  function attachExDrag(card, r) {
+  function attachHoldDrag(el, opts) {
     const HOLD_MS = 500;
     const DRIFT_SQ = 144; // 12px, same tolerance as the long-press sheet
-    const INTERACTIVE = 'input, button, textarea, select, .sug, .sug-box';
     let holdTimer = null;
     let dragging = false;
     let pid = -1;
@@ -1161,44 +1184,44 @@
       dragging = true;
       exDragActive = true;
       document.body.classList.add('ex-dragging');
-      const rect = card.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       grabDY = e.clientY - rect.top;
       // clone BEFORE the original gets drag-src, or the ghost inherits
-      // its visibility:hidden and the lifted card turns invisible
-      ghost = card.cloneNode(true);
-      card.classList.add('drag-src');
+      // its visibility:hidden and the lifted element turns invisible
+      ghost = el.cloneNode(true);
+      el.classList.add('drag-src');
       ghost.classList.add('drag-ghost');
       ghost.style.width = rect.width + 'px';
       ghost.style.left = rect.left + 'px';
       ghost.style.top = (e.clientY - grabDY) + 'px';
       // cloned inputs carry attributes, not live values - copy them over
-      const srcIns = card.querySelectorAll('input');
+      const srcIns = el.querySelectorAll('input');
       const ghoIns = ghost.querySelectorAll('input');
       for (let i = 0; i < srcIns.length && i < ghoIns.length; i++) {
         ghoIns[i].value = srcIns[i].value;
       }
       document.body.appendChild(ghost);
-      try { card.setPointerCapture(pid); } catch (err) {}
+      try { el.setPointerCapture(pid); } catch (err) {}
     };
 
     const moveDrag = (e) => {
       if (!ghost) return;
       ghost.style.top = (e.clientY - grabDY) + 'px';
       const others = [];
-      $app.querySelectorAll('.ex-card[data-eid]').forEach((c) => {
-        if (c !== card) others.push(c);
+      $app.querySelectorAll(opts.siblings).forEach((c) => {
+        if (c !== el) others.push(c);
       });
       let idx = 0;
       for (let i = 0; i < others.length; i++) {
         const rc = others[i].getBoundingClientRect();
         if (e.clientY > rc.top + rc.height / 2) idx = i + 1;
       }
-      const parent = card.parentNode;
+      const parent = el.parentNode;
       if (idx < others.length) {
-        if (card.nextSibling !== others[idx]) parent.insertBefore(card, others[idx]);
+        if (el.nextSibling !== others[idx]) parent.insertBefore(el, others[idx]);
       } else {
         const last = others[others.length - 1];
-        if (last && card.previousSibling !== last) parent.insertBefore(card, last.nextSibling);
+        if (last && el.previousSibling !== last) parent.insertBefore(el, last.nextSibling);
       }
     };
 
@@ -1209,15 +1232,9 @@
       stopHold();
       docUnbind();
       if (ghost) { ghost.remove(); ghost = null; }
-      card.classList.remove('drag-src');
-      try { card.releasePointerCapture(pid); } catch (err) {}
-      // rebuild the exercise order from the DOM and save
-      const order = [];
-      $app.querySelectorAll('.ex-card[data-eid]').forEach((c) => order.push(c.dataset.eid));
-      r.exercises = order
-        .map((id) => r.exercises.find((x) => x.id === id))
-        .filter(Boolean);
-      scheduleSave(r, true);
+      el.classList.remove('drag-src');
+      try { el.releasePointerCapture(pid); } catch (err) {}
+      opts.onEnd(Array.prototype.slice.call($app.querySelectorAll(opts.siblings)));
       // the release can emit a stray click (e.g. a set toggle) - eat it,
       // but only briefly so the next real tap still works
       const kill = (ev) => {
@@ -1235,8 +1252,8 @@
     };
 
     // The move/up/cancel listeners live on the document, bound only while a
-    // hold (or drag) is in flight, so releases outside the card are caught
-    // and nothing lingers after a render.
+    // hold (or drag) is in flight, so releases outside the element are
+    // caught and nothing lingers after a render.
     const docMove = (e) => {
       if (e.pointerId !== pid) return;
       if (dragging) { moveDrag(e); return; }
@@ -1268,9 +1285,9 @@
       document.removeEventListener('touchmove', docTouch);
     };
 
-    card.addEventListener('pointerdown', (e) => {
+    el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || exDragActive) return;
-      if (e.target && e.target.closest && e.target.closest(INTERACTIVE)) return;
+      if (e.target && e.target.closest && e.target.closest(opts.interactive)) return;
       stopHold();
       pid = e.pointerId;
       sx = e.clientX;
@@ -1281,10 +1298,26 @@
       }, HOLD_MS);
       docBind();
     });
-    card.addEventListener('contextmenu', (e) => {
+    el.addEventListener('contextmenu', (e) => {
       if (dragging || holdTimer) {
         if (e.preventDefault) e.preventDefault();
       }
+    });
+  }
+
+  // Reorder exercises within a routine: the order is rebuilt from the DOM
+  // and saved with the routine.
+  function attachExDrag(card, r) {
+    attachHoldDrag(card, {
+      siblings: '.ex-card[data-eid]',
+      interactive: 'input, button, textarea, select, .sug, .sug-box',
+      onEnd: (els) => {
+        const order = els.map((c) => c.dataset.eid);
+        r.exercises = order
+          .map((id) => r.exercises.find((x) => x.id === id))
+          .filter(Boolean);
+        scheduleSave(r, true);
+      },
     });
   }
 
@@ -1671,10 +1704,10 @@
       I.chart + '</button>';
   }
 
-  function rangeOptsGroup() {
+  function rangeOptsGroup(range) {
     return {
       label: 'Range',
-      items: STATS_RANGES.map((o) => ({ key: 'range:' + o.id, label: o.label, on: statsRange === o.id })),
+      items: STATS_RANGES.map((o) => ({ key: 'range:' + o.id, label: o.label, on: range === o.id })),
     };
   }
 
@@ -1967,26 +2000,35 @@
         '<div class="empty">No sessions in this range.</div>' +
         '</div>';
     }
-    const unit = sessions[sessions.length - 1].unit;
-    const disps = sessions.map((s) => (unit === 'kg' ? s.wkg : s.wkg / LB_TO_KG));
     if (statsPointSel == null || statsPointSel < 0 || statsPointSel >= sessions.length) {
       statsPointSel = sessions.length - 1;
     }
-    const sel = sessions[statsPointSel];
 
     return '<div class="card">' +
       '<div class="ex-opts-row">' +
       '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
       chartOptsBtn('btn-ex-opts') +
       '</div>' +
-      progressionSVG(sessions, disps, unit, statsExType, statsExMode) +
-      '<div class="cell-detail">Top set <b>' + fmt1(disps[statsPointSel]) + ' ' + esc(unit) + '</b>' +
-      ' \u00b7 ' + sel.reps + ' reps \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>' +
+      progressionChartBody(sessions, statsExType, statsExMode, statsPointSel) +
       '</div>' +
       '<p class="hint">Heaviest working-set weight per session (warm-ups excluded), spaced by date. Tap a point or bar to see that session\u2019s top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
   }
 
-  function progressionSVG(sessions, disps, unit, type, mode) {
+  // Progression chart + detail line for one exercise's sessions, shared by
+  // the stats tab and the home pin; selIdx is the highlighted session.
+  function progressionChartBody(sessions, type, mode, selIdx) {
+    const unit = sessions[sessions.length - 1].unit;
+    const disps = sessions.map((s) => (unit === 'kg' ? s.wkg : s.wkg / LB_TO_KG));
+    if (selIdx == null || selIdx < 0 || selIdx >= sessions.length) {
+      selIdx = sessions.length - 1;
+    }
+    const sel = sessions[selIdx];
+    return progressionSVG(sessions, disps, unit, type, mode, selIdx) +
+      '<div class="cell-detail">Top set <b>' + fmt1(disps[selIdx]) + ' ' + esc(unit) + '</b>' +
+      ' \u00b7 ' + sel.reps + ' reps \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>';
+  }
+
+  function progressionSVG(sessions, disps, unit, type, mode, selIdx) {
     const W = 320, H = 150, padX = 12, top = 26, bot = 24;
     const n = sessions.length;
     const t0 = sessions[0].ts;
@@ -2004,13 +2046,13 @@
     const base = (H - bot).toFixed(1);
     const dots = sessions.map((s, i) =>
       '<circle class="pt" data-i="' + i + '" cx="' + xs[i].toFixed(1) + '" cy="' + y(disps[i]).toFixed(1) +
-      '" r="' + (i === n - 1 ? 4 : 3) + '" fill="' + (i === statsPointSel ? 'var(--text)' : 'var(--accent)') + '"/>'
+      '" r="' + (i === n - 1 ? 4 : 3) + '" fill="' + (i === selIdx ? 'var(--text)' : 'var(--accent)') + '"/>'
     ).join('');
     let minGap = Infinity;
     for (let i = 1; i < n; i++) minGap = Math.min(minGap, xs[i] - xs[i - 1]);
     const bw = n > 1 ? Math.max(4, Math.min(24, minGap * 0.6)) : 24;
     const bars = sessions.map((s, i) =>
-      '<rect class="pbar' + (i === statsPointSel ? ' sel' : '') + '" data-i="' + i + '" x="' +
+      '<rect class="pbar' + (i === selIdx ? ' sel' : '') + '" data-i="' + i + '" x="' +
       (xs[i] - bw / 2).toFixed(1) + '" y="' + y(disps[i]).toFixed(1) + '" width="' + bw.toFixed(1) +
       '" height="' + Math.max(0, H - bot - y(disps[i])).toFixed(1) + '" rx="2"/>'
     ).join('');
@@ -2044,7 +2086,8 @@
         items: PLOT_MODES.map((o) => ({ key: 'mode:' + o.id, label: o.label, on: statsExMode === o.id })),
       });
     }
-    gs.push(rangeOptsGroup());
+    gs.push(rangeOptsGroup(statsRange));
+    gs.push({ label: 'Home', items: [{ key: 'pin', label: 'Pin to Home' }] });
     return gs;
   }
 
@@ -2054,6 +2097,7 @@
     if (kind === 'type') statsExType = val;
     else if (kind === 'mode') statsExMode = val;
     else if (kind === 'range') setStatsRange(val);
+    else if (kind === 'pin') pinCurrentChart();
     render();
   }
 
@@ -2086,12 +2130,22 @@
       return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
     }
     const seg = '<div class="opts-row">' + chartOptsBtn('btn-mus-opts') + '</div>';
-    return statsMusView === 'radar'
-      ? seg + radarHTML(cur, prev)
-      : seg + heatHTML(buckets, monthly);
+    if (statsMusView === 'radar') {
+      return seg +
+        '<div class="card">' + radarInnerHTML(cur, prev, statsRange) + '</div>' +
+        '<p class="hint">Total volume by muscle group for the selected range (kg-normalized).' +
+        (prev ? ' Solid = selected range, dashed = the ' + rangeWord(statsRange) + ' before it.' : '') + '</p>';
+    }
+    return seg +
+      '<div class="card">' + heatRowsHTML(buckets, monthly, statsCellSel) + '</div>' +
+      '<div class="card"><div class="cell-detail">' +
+      heatDetailHTML(buckets, monthly, statsCellSel) + '</div></div>' +
+      '<p class="hint">Training volume by muscle group per ' +
+      (monthly ? 'month' : 'week (Monday-start)') +
+      ' for the selected range. Darker means more volume (kg-normalized).</p>';
   }
 
-  function heatHTML(buckets, monthly) {
+  function heatRowsHTML(buckets, monthly, cellSel) {
     const byKey = {};
     buckets.forEach((w) => { byKey[w.key] = w; });
 
@@ -2113,18 +2167,16 @@
     });
 
     const cats = GYMLOG_CATS.filter((c) => grid[c] && buckets.some((w) => grid[c][w.key]));
-    if (!cats.length) {
-      return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
-    }
+    if (!cats.length) return '<div class="empty">No completed workouts in this range.</div>';
     let maxCell = 0;
     cats.forEach((c) => buckets.forEach((w) => {
       maxCell = Math.max(maxCell, (grid[c] && grid[c][w.key]) || 0);
     }));
 
-    const rows = cats.map((cat) => {
+    return cats.map((cat) => {
       const cells = buckets.map((w) => {
         const v = (grid[cat] && grid[cat][w.key]) || 0;
-        const sel = statsCellSel && statsCellSel.cat === cat && statsCellSel.key === w.key;
+        const sel = cellSel && cellSel.cat === cat && cellSel.key === w.key;
         const per = monthly ? 'month of ' : 'week of ';
         if (v <= 0) {
           return '<button class="hcell' + (sel ? ' sel' : '') + '" type="button" data-cat="' + esc(cat) +
@@ -2139,12 +2191,32 @@
       return '<div class="hrow"><span class="hlabel">' + esc(cat) + '</span>' +
         '<div class="hcells" style="grid-template-columns: repeat(' + buckets.length + ', 1fr)">' + cells + '</div></div>';
     }).join('');
+  }
 
+  function heatDetailHTML(buckets, monthly, cellSel) {
+    const byKey = {};
+    buckets.forEach((w) => { byKey[w.key] = w; });
+    const grid = {};
+    completedRoutines().forEach((r) => {
+      const d = routineDate(r);
+      if (!d) return;
+      const w = byKey[bucketKeyFor(monthly, d)];
+      if (!w) return;
+      r.exercises.forEach((ex) => {
+        const cat = gymlogCategoryOf(ex.name);
+        ex.sets.forEach((s) => {
+          const v = setVolumeKg(ex, s);
+          if (v <= 0) return;
+          grid[cat] = grid[cat] || {};
+          grid[cat][w.key] = (grid[cat][w.key] || 0) + v;
+        });
+      });
+    });
     let detail = 'Tap a cell to see that muscle and ' + (monthly ? 'month' : 'week') + '.';
-    if (statsCellSel) {
-      const cat = statsCellSel.cat;
-      const v = (grid[cat] && grid[cat][statsCellSel.key]) || 0;
-      const w = byKey[statsCellSel.key];
+    if (cellSel) {
+      const cat = cellSel.cat;
+      const v = (grid[cat] && grid[cat][cellSel.key]) || 0;
+      const w = byKey[cellSel.key];
       const range = w
         ? (monthly
           ? w.start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
@@ -2153,23 +2225,15 @@
       detail = esc(cat) + ' \u00b7 ' + range +
         ' \u00b7 <b>' + (v > 0 ? fmtVol(v) : 'no volume') + '</b>';
     }
-
-    return '<div class="card">' + rows + '</div>' +
-      '<div class="card"><div class="cell-detail">' + detail + '</div></div>' +
-      '<p class="hint">Training volume by muscle group per ' +
-      (monthly ? 'month' : 'week (Monday-start)') +
-      ' for the selected range. Darker means more volume (kg-normalized).</p>';
+    return detail;
   }
 
-  function radarHTML(cur, prev) {
-    return '<div class="card">' + radarSVG(cur, prev) +
+  function radarInnerHTML(cur, prev, range) {
+    return radarSVG(cur, prev) +
       (prev
         ? '<div class="cell-detail rlegend"><span class="rkey rkey-cur"></span>selected range' +
-          '<span class="rkey rkey-prev"></span>previous ' + rangeWord(statsRange) + '</div>'
-        : '') +
-      '</div>' +
-      '<p class="hint">Total volume by muscle group for the selected range (kg-normalized).' +
-      (prev ? ' Solid = selected range, dashed = the ' + rangeWord(statsRange) + ' before it.' : '') + '</p>';
+          '<span class="rkey rkey-prev"></span>previous ' + rangeWord(range) + '</div>'
+        : '');
   }
 
   function radarSVG(cur, prev) {
@@ -2209,7 +2273,8 @@
   function musOptsGroups() {
     return [
       { label: 'View', items: MUS_VIEWS.map((o) => ({ key: 'view:' + o.id, label: o.label, on: statsMusView === o.id })) },
-      rangeOptsGroup(),
+      rangeOptsGroup(statsRange),
+      { label: 'Home', items: [{ key: 'pin', label: 'Pin to Home' }] },
     ];
   }
 
@@ -2218,6 +2283,7 @@
     const val = k.slice(kind.length + 1);
     if (kind === 'view') statsMusView = val;
     else if (kind === 'range') setStatsRange(val);
+    else if (kind === 'pin') pinCurrentChart();
     render();
   }
 
@@ -2233,8 +2299,11 @@
 
   /* ---- volume tab ---- */
 
-  function statsVolumeHTML() {
-    const bb = rangeBuckets(statsRange);
+  // Volume chart data for a range: buckets with per-category and total
+  // volume, the chart max and the range total. Shared by the stats tab and
+  // the home pin.
+  function volumeBucketsData(range) {
+    const bb = rangeBuckets(range);
     const buckets = bb.buckets;
     const monthly = bb.monthly;
     const byKey = {};
@@ -2261,35 +2330,49 @@
       Object.keys(c.cats).forEach((k) => { c.total += c.cats[k]; });
       totalAll += c.total;
     });
-    const max = Math.max.apply(null, buckets.map((c) => c.total).concat([1]));
+    return {
+      buckets: buckets,
+      monthly: monthly,
+      byKey: byKey,
+      max: Math.max.apply(null, buckets.map((c) => c.total).concat([1])),
+      totalAll: totalAll,
+    };
+  }
 
-    const lastWithVolume = buckets.slice().reverse().find((c) => c.total > 0);
-    if (!statsSelKey || !byKey[statsSelKey]) {
-      statsSelKey = lastWithVolume ? lastWithVolume.key : buckets[buckets.length - 1].key;
-    }
-    const sel = byKey[statsSelKey];
-    const selEnd = monthly
-      ? new Date(sel.start.getFullYear(), sel.start.getMonth() + 1, 0)
-      : new Date(sel.start.getFullYear(), sel.start.getMonth(), sel.start.getDate() + 6);
+  // Valid selected bucket key: falls back to the last bucket with volume.
+  function volumeSelKey(data, selKey) {
+    if (selKey && data.byKey[selKey]) return selKey;
+    const lastWithVolume = data.buckets.slice().reverse().find((c) => c.total > 0);
+    return lastWithVolume ? lastWithVolume.key : data.buckets[data.buckets.length - 1].key;
+  }
 
-    const chartHTML = buckets.map((c) => {
+  function volumeChartHTML(data, selKey, type, mode) {
+    const sel = data.byKey[selKey];
+    if (type === 'line') return volumeLineSVG(data.buckets, data.monthly, selKey, mode);
+    return '<div class="chart">' + data.buckets.map((c) => {
       const segs = GYMLOG_CATS.slice().reverse()
         .filter((cat) => c.cats[cat] > 0)
         .map((cat) => '<div class="segm" style="height:' +
-          ((c.cats[cat] / max) * 100).toFixed(3) + '%;background:' +
+          ((c.cats[cat] / data.max) * 100).toFixed(3) + '%;background:' +
           GYMLOG_CAT_COLORS[cat] + '"></div>')
         .join('');
-      const label = monthly
+      const label = data.monthly
         ? (c.start.getMonth() + 1) + '/' + String(c.start.getFullYear()).slice(-2)
         : c.start.getDate() + '/' + (c.start.getMonth() + 1);
       return '<button class="col' + (c.key === sel.key ? ' sel' : '') + '" data-w="' + c.key +
-        '" type="button" aria-label="' + (monthly ? 'Month of ' : 'Week of ') + fmtDay(c.key) + '">' +
+        '" type="button" aria-label="' + (data.monthly ? 'Month of ' : 'Week of ') + fmtDay(c.key) + '">' +
         '<span class="col-total">' + (c.total > 0 ? fmtVolCompact(c.total) : '') + '</span>' +
         (c.total > 0 ? '<span class="segs">' + segs + '</span>' : '<span class="segs empty"></span>') +
         '<span class="col-label">' + label + '</span>' +
         '</button>';
-    }).join('');
+    }).join('') + '</div>';
+  }
 
+  function volumeBreakdownHTML(data, selKey) {
+    const sel = data.byKey[selKey];
+    const selEnd = data.monthly
+      ? new Date(sel.start.getFullYear(), sel.start.getMonth() + 1, 0)
+      : new Date(sel.start.getFullYear(), sel.start.getMonth(), sel.start.getDate() + 6);
     const rows = GYMLOG_CATS.filter((cat) => sel.cats[cat] > 0).map((cat) => {
       const share = sel.total ? Math.round((sel.cats[cat] / sel.total) * 100) : 0;
       return '<div class="bd-row">' +
@@ -2299,32 +2382,34 @@
         '<span class="bd-vol">' + fmtVol(sel.cats[cat]) + '</span>' +
         '</div>';
     }).join('');
-
-    return '<div class="card note">' +
-      '<div class="sum-row"><span>Range total</span><b>' + fmtVol(totalAll) + '</b></div>' +
-      '<div class="sum-row"><span>' + (monthly ? 'Monthly' : 'Weekly') + ' average</span><b>' +
-      fmtVol(totalAll / buckets.length) + '</b></div>' +
-      '</div>' +
-      '<div class="card chart-card">' +
-      '<div class="opts-row">' + chartOptsBtn('btn-vol-opts') + '</div>' +
-      (statsVolType === 'bar'
-        ? '<div class="chart">' + chartHTML + '</div>'
-        : volumeLineSVG(buckets, monthly)) +
-      '</div>' +
-      '<div class="card">' +
-      '<div class="section-label slim">' +
-      (monthly
+    return '<div class="section-label slim">' +
+      (data.monthly
         ? 'Month of ' + sel.start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
         : 'Week of ' + fmtDay(sel.key) + ' \u2013 ' + fmtDay(isoKey(selEnd))) +
       '</div>' +
-      (rows || '<div class="empty-inline">No volume in this ' + (monthly ? 'month' : 'week') + '.</div>') +
+      (rows || '<div class="empty-inline">No volume in this ' + (data.monthly ? 'month' : 'week') + '.</div>');
+  }
+
+  function statsVolumeHTML() {
+    const data = volumeBucketsData(statsRange);
+    statsSelKey = volumeSelKey(data, statsSelKey);
+
+    return '<div class="card note">' +
+      '<div class="sum-row"><span>Range total</span><b>' + fmtVol(data.totalAll) + '</b></div>' +
+      '<div class="sum-row"><span>' + (data.monthly ? 'Monthly' : 'Weekly') + ' average</span><b>' +
+      fmtVol(data.totalAll / data.buckets.length) + '</b></div>' +
       '</div>' +
+      '<div class="card chart-card">' +
+      '<div class="opts-row">' + chartOptsBtn('btn-vol-opts') + '</div>' +
+      volumeChartHTML(data, statsSelKey, statsVolType, statsVolMode) +
+      '</div>' +
+      '<div class="card">' + volumeBreakdownHTML(data, statsSelKey) + '</div>' +
       '<p class="hint">Volume = weight \u00d7 reps per set, completed routines only, bucketed per ' +
-      (monthly ? 'month' : 'week') + '. Totals are normalized to kg for comparison (1 kg = 2.2046 lb); your logged entries are unchanged.</p>';
+      (data.monthly ? 'month' : 'week') + '. Totals are normalized to kg for comparison (1 kg = 2.2046 lb); your logged entries are unchanged.</p>';
   }
 
   // Volume totals per bucket as an SVG trend line (line chart mode).
-  function volumeLineSVG(buckets, monthly) {
+  function volumeLineSVG(buckets, monthly, selKey, mode) {
     const W = 320, H = 170, padX = 14, top = 18, bot = 24;
     const n = buckets.length;
     const ts = buckets.map((c) => c.start.getTime());
@@ -2342,8 +2427,8 @@
     const base = (H - bot).toFixed(1);
     const dots = buckets.map((c, i) =>
       '<circle class="vpt" data-w="' + c.key + '" cx="' + xs[i].toFixed(1) + '" cy="' + y(c.total).toFixed(1) +
-      '" r="' + (c.key === statsSelKey ? 4.5 : 3.5) + '" fill="' +
-      (c.key === statsSelKey ? 'var(--text)' : 'var(--accent)') + '"/>'
+      '" r="' + (c.key === selKey ? 4.5 : 3.5) + '" fill="' +
+      (c.key === selKey ? 'var(--text)' : 'var(--accent)') + '"/>'
     ).join('');
     const last = buckets[n - 1];
     const lbl = last.total > 0
@@ -2355,7 +2440,7 @@
       ? c.start.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
       : fmtDay(c.key);
     return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Volume trend">' +
-      (n > 1 && statsVolMode === 'continuous'
+      (n > 1 && mode === 'continuous'
         ? '<polygon class="area" points="' + pts.join(' ') + ' ' + xs[n - 1].toFixed(1) + ',' + base + ' ' + xs[0].toFixed(1) + ',' + base + '"/>' +
           '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
         : '') +
@@ -2376,7 +2461,8 @@
         items: PLOT_MODES.map((o) => ({ key: 'mode:' + o.id, label: o.label, on: statsVolMode === o.id })),
       });
     }
-    gs.push(rangeOptsGroup());
+    gs.push(rangeOptsGroup(statsRange));
+    gs.push({ label: 'Home', items: [{ key: 'pin', label: 'Pin to Home' }] });
     return gs;
   }
 
@@ -2386,6 +2472,7 @@
     if (kind === 'type') statsVolType = val;
     else if (kind === 'mode') statsVolMode = val;
     else if (kind === 'range') setStatsRange(val);
+    else if (kind === 'pin') pinCurrentChart();
     render();
   }
 
@@ -2397,6 +2484,173 @@
     $app.querySelectorAll('.vpt').forEach((el) => {
       el.onclick = () => { statsSelKey = el.dataset.w; render(); };
     });
+  }
+
+  /* ---- home chart pin ---- */
+
+  // One pinned chart on Home, fully interactive: its options sheet edits and
+  // persists the pin, and selections live in homeSel for this session only.
+  let homeSel = { point: null, key: null, cell: null };
+
+  // Home section order: the saved order wins, unknown ids are dropped and
+  // sections that appeared later (or were never saved) keep their default
+  // spot at the end.
+  function homeOrderOrDefault() {
+    const all = ['cal', 'chart', 'new', 'active', 'scheduled', 'history'];
+    const saved = Array.isArray(settings.homeOrder) ? settings.homeOrder : [];
+    const out = saved.filter((id) => all.indexOf(id) !== -1);
+    all.forEach((id) => { if (out.indexOf(id) === -1) out.push(id); });
+    return out;
+  }
+
+  // Snapshot the currently viewed chart as the home pin (one at a time).
+  function pinCurrentChart() {
+    settings.homeChart = {
+      tab: statsTab, ex: statsExSel,
+      exType: statsExType, exMode: statsExMode,
+      volType: statsVolType, volMode: statsVolMode,
+      view: statsMusView, range: statsRange,
+    };
+    homeSel = { point: null, key: null, cell: null };
+    store.setSetting('homeChart', settings.homeChart)
+      .catch((e) => console.error('Kaioken:', e));
+    toast('Pinned to Home');
+  }
+
+  function homeChartHTML() {
+    const cfg = settings.homeChart;
+    if (!cfg) return '';
+    const title = cfg.tab === 'progression' ? (cfg.ex || 'Progression')
+      : cfg.tab === 'volume' ? 'Volume' : 'Muscles';
+    return '<div class="card home-chart">' +
+      '<div class="chart-head">' +
+      '<button class="chart-title" id="home-chart-title" type="button">' + esc(title) + '</button>' +
+      chartOptsBtn('btn-home-opts') +
+      '</div>' +
+      homeChartBodyHTML(cfg) +
+      '</div>';
+  }
+
+  function homeChartBodyHTML(cfg) {
+    if (cfg.tab === 'progression') {
+      const byName = progressionData();
+      const g = byName[String(cfg.ex || '').toLowerCase()];
+      if (!g || !g.sessions.length) {
+        return '<div class="empty">No sessions in this range.</div>';
+      }
+      const start = rangeStart(cfg.range);
+      const sessions = start
+        ? g.sessions.filter((s) => s.ts >= start.getTime())
+        : g.sessions;
+      if (!sessions.length) {
+        return '<div class="empty">No sessions in this range.</div>';
+      }
+      return progressionChartBody(sessions, cfg.exType, cfg.exMode, homeSel.point);
+    }
+    if (cfg.tab === 'volume') {
+      const data = volumeBucketsData(cfg.range);
+      const selKey = volumeSelKey(data, homeSel.key);
+      return volumeChartHTML(data, selKey, cfg.volType, cfg.volMode) +
+        volumeBreakdownHTML(data, selKey);
+    }
+    const start = rangeStart(cfg.range);
+    const prevStart = prevRangeStart(cfg.range, start);
+    const cur = volumeByCat(start, null);
+    const prev = prevStart ? volumeByCat(prevStart, start) : null;
+    const any = GYMLOG_CATS.some((c) =>
+      (cur[c] || 0) > 0 || (prev ? (prev[c] || 0) > 0 : false));
+    if (!any) return '<div class="empty">No completed workouts in this range.</div>';
+    if (cfg.view === 'radar') return radarInnerHTML(cur, prev, cfg.range);
+    const bb = rangeBuckets(cfg.range);
+    return heatRowsHTML(bb.buckets, bb.monthly, homeSel.cell) +
+      '<div class="cell-detail">' +
+      heatDetailHTML(bb.buckets, bb.monthly, homeSel.cell) + '</div>';
+  }
+
+  function homeOptsGroups() {
+    const cfg = settings.homeChart;
+    if (!cfg) return [];
+    const gs = [];
+    if (cfg.tab === 'muscles') {
+      gs.push({ label: 'View', items: MUS_VIEWS.map((o) => ({ key: 'view:' + o.id, label: o.label, on: cfg.view === o.id })) });
+    } else {
+      const types = cfg.tab === 'progression' ? EX_TYPES : VOL_TYPES;
+      const curType = cfg.tab === 'progression' ? cfg.exType : cfg.volType;
+      gs.push({ label: 'Chart', items: types.map((o) => ({ key: 'type:' + o.id, label: o.label, on: curType === o.id })) });
+      if (curType === 'line') {
+        const curMode = cfg.tab === 'progression' ? cfg.exMode : cfg.volMode;
+        gs.push({ label: 'Style', items: PLOT_MODES.map((o) => ({ key: 'mode:' + o.id, label: o.label, on: curMode === o.id })) });
+      }
+    }
+    gs.push(rangeOptsGroup(cfg.range));
+    gs.push({ label: 'Home', items: [{ key: 'unpin', label: 'Unpin from Home' }] });
+    return gs;
+  }
+
+  function applyHomeOpt(k) {
+    const cfg = settings.homeChart;
+    if (!cfg) return;
+    const kind = k.split(':')[0];
+    const val = k.slice(kind.length + 1);
+    if (kind === 'unpin') {
+      settings.homeChart = null;
+      homeSel = { point: null, key: null, cell: null };
+      store.setSetting('homeChart', null)
+        .catch((e) => console.error('Kaioken:', e));
+      toast('Removed from Home');
+      render();
+      return;
+    }
+    if (kind === 'type') {
+      if (cfg.tab === 'progression') cfg.exType = val;
+      else cfg.volType = val;
+    } else if (kind === 'mode') {
+      if (cfg.tab === 'progression') cfg.exMode = val;
+      else cfg.volMode = val;
+    } else if (kind === 'view') cfg.view = val;
+    else if (kind === 'range') {
+      cfg.range = val;
+      homeSel = { point: null, key: null, cell: null };
+    }
+    store.setSetting('homeChart', cfg).catch((e) => console.error('Kaioken:', e));
+    render();
+  }
+
+  function bindHomeChart() {
+    const cfg = settings.homeChart;
+    if (!cfg) return;
+    const titleBtn = document.getElementById('home-chart-title');
+    if (titleBtn) titleBtn.onclick = () => {
+      statsTab = cfg.tab === 'muscles' ? 'heatmap' : cfg.tab;
+      if (cfg.ex) statsExSel = cfg.ex;
+      if (cfg.exType) statsExType = cfg.exType;
+      if (cfg.exMode) statsExMode = cfg.exMode;
+      if (cfg.volType) statsVolType = cfg.volType;
+      if (cfg.volMode) statsVolMode = cfg.volMode;
+      if (cfg.view) statsMusView = cfg.view;
+      statsRange = cfg.range || '1m';
+      statsSelKey = null;
+      statsPointSel = null;
+      statsCellSel = null;
+      go('stats');
+    };
+    bindChartOpts('btn-home-opts', 'Chart options', homeOptsGroups, applyHomeOpt);
+    if (cfg.tab === 'progression') {
+      $app.querySelectorAll('.home-chart .pt, .home-chart .pbar').forEach((el) => {
+        el.onclick = () => { homeSel.point = Number(el.dataset.i); render(); };
+      });
+    } else if (cfg.tab === 'volume') {
+      $app.querySelectorAll('.home-chart .col, .home-chart .vpt').forEach((el) => {
+        el.onclick = () => { homeSel.key = el.dataset.w; render(); };
+      });
+    } else {
+      $app.querySelectorAll('.home-chart .hcell').forEach((el) => {
+        el.onclick = () => {
+          homeSel.cell = { cat: el.dataset.cat, key: el.dataset.w };
+          render();
+        };
+      });
+    }
   }
 
   /* ---------- backup / restore ---------- */
@@ -2675,6 +2929,10 @@
     .then((v) => { settings.suppsLast = v === true; })
     .then(() => store.getSetting('bwUnit', 'kg'))
     .then((u) => { settings.bwUnit = u === 'lb' ? 'lb' : 'kg'; })
+    .then(() => store.getSetting('homeChart', null))
+    .then((v) => { settings.homeChart = v && typeof v === 'object' && v.tab ? v : null; })
+    .then(() => store.getSetting('homeOrder', null))
+    .then((v) => { settings.homeOrder = Array.isArray(v) ? v : null; })
     .then(() => store.all())
     .then((rows) => { routines = rows || []; })
     .then(render)
