@@ -768,6 +768,7 @@ input[type="date"] {
   cursor: pointer;
 }
 .seg button.on { background: var(--accent); color: var(--accent-ink); }
+.seg.locked { opacity: 0.45; }
 .seg-rest button { min-width: 80px; }
 
 .set-row {

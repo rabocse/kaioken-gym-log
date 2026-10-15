@@ -1138,6 +1138,15 @@
   // nothing extra is stored: rename to a cardio name and the rows switch.
   const isCardioEx = (ex) => gymlogCategoryOf(ex.name) === 'Cardio';
 
+  // The unit is locked once any set has logged values: switching it would
+  // retroactively re-label every logged number without converting it.
+  function exUnitLocked(ex) {
+    return ex.sets.some((s) =>
+      isCardioEx(ex)
+        ? (s.mins != null || s.dist != null)
+        : (s.reps != null || s.weight != null));
+  }
+
   // Personal record: a set whose estimated 1RM (Epley, normalized to kg)
   // beats every other set for that exercise name - your previous bests and
   // the other sets in this routine alike. Derived from the data, so nothing
@@ -1283,11 +1292,11 @@
     }).join('');
 
     const unitSeg = cardio
-      ? '<div class="seg" role="group" aria-label="Distance unit">' +
+      ? '<div class="seg' + (exUnitLocked(ex) ? ' locked' : '') + '" role="group" aria-label="Distance unit">' +
         '<button type="button" class="' + (ex.dunit === 'mi' ? '' : 'on') + '" data-u="km">km</button>' +
         '<button type="button" class="' + (ex.dunit === 'mi' ? 'on' : '') + '" data-u="mi">mi</button>' +
         '</div>'
-      : '<div class="seg" role="group" aria-label="Weight unit">' +
+      : '<div class="seg' + (exUnitLocked(ex) ? ' locked' : '') + '" role="group" aria-label="Weight unit">' +
         '<button type="button" class="' + (ex.unit === 'kg' ? 'on' : '') + '" data-u="kg">kg</button>' +
         '<button type="button" class="' + (ex.unit === 'lb' ? 'on' : '') + '" data-u="lb">lb</button>' +
         '</div>';
@@ -1698,6 +1707,10 @@
           const cardioNow = isCardioEx(ex);
           const cur = cardioNow ? (ex.dunit || 'km') : ex.unit;
           if (cur === b.dataset.u) return;
+          if (exUnitLocked(ex)) {
+            toast('Unit is locked once sets are logged');
+            return;
+          }
           if (cardioNow) ex.dunit = b.dataset.u;
           else {
             ex.unit = b.dataset.u;
