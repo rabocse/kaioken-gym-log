@@ -7,6 +7,15 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.6.2] - 2026-10-14
+
+### Fixed
+- "Repeat as New" copies warm-up flags: duplicated warm-up sets stay
+  warm-ups (thermometer icon, excluded from PRs and volume) instead of
+  silently becoming working sets.
+- The backup sanitizer normalizes the warm-up flag explicitly (and drops
+  non-boolean garbage), making the restore contract explicit.
+
 ## [1.6.1] - 2026-10-14
 
 ### Fixed
