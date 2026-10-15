@@ -7,6 +7,39 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.7.0] - 2026-10-15
+
+### Added
+- In-app confirm/prompt/alert sheets replace every native alert/confirm/
+  prompt dialog (unreliable in iOS Home-Screen web apps): all delete
+  confirmations, routine rename and import feedback now run through the
+  app's own bottom sheets.
+- Abandon action for active workouts (back to scheduled, nothing logged);
+  starting a second concurrent workout asks first.
+- Backup envelope now includes settings (theme, rest, background style,
+  units, pinned chart, home order - the background photo stays
+  device-local); importing previews what will be overwritten before
+  writing anything.
+- Keyboard access: sheets focus their first control, close on Escape,
+  trap Tab and return focus to the trigger; chart points/bars are
+  keyboard-operable; exercises move with small up/down buttons.
+- Content-Security-Policy meta tag as an XSS backstop for the
+  innerHTML-based UI; the dev server now defaults to loopback (127.0.0.1)
+  with sane timeouts (use -addr :8080 to bind all interfaces).
+
+### Fixed
+- The kg/lb (and km/mi) unit per exercise locks once any set has logged
+  values, so history can no longer be silently re-labeled without
+  conversion.
+- One canonical workout date: finishing stamps the performed day, and the
+  calendar, charts and cards all agree (endedAt is duration only).
+- Finishing warns when sets with values are not marked done.
+- Import sanitizes impossible states (NaN timers, off-canvas chart
+  points) by deriving missing timestamps.
+- Background photo: EXIF orientation is applied (iPhone portraits render
+  upright), non-images are rejected and failures show a toast; the stored
+  value is validated as a photo data URL before reaching CSS.
+
 ## [1.6.2] - 2026-10-14
 
 ### Fixed

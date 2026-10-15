@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.6.2';
+  const APP_VERSION = '1.7.0';
 
   /* ---------- local database (IndexedDB) ---------- */
   const DB_NAME = 'gymlog';
