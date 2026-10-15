@@ -1027,7 +1027,7 @@
           '</button>' +
           '<div class="month-items"' + (open ? '' : ' hidden') + '>' + items + '</div>';
       }).join('') +
-        '<p class="hint">Hold a past workout (or right-click it) to repeat or delete it.</p>';
+        '<p class="hint">Hold any workout (or right-click it) to rename it, repeat it as new, or delete it.</p>';
     } else {
       historyHTML = '<div class="section-label">History</div>' +
         '<div class="empty">No finished workouts yet. Create one and hit the gym.</div>';
@@ -1096,7 +1096,9 @@
     $app.querySelectorAll('.item').forEach((el) => {
       el.onclick = () => go('routine', { id: el.dataset.id });
     });
-    $app.querySelectorAll('.item.hist').forEach((el) => {
+    // The long-press sheet (Rename / Repeat as New / Delete) is available
+    // on every routine entry - history, active and scheduled alike.
+    $app.querySelectorAll('.item').forEach((el) => {
       const r = getRoutine(el.dataset.id);
       if (r) attachLongPress(el, r);
     });
