@@ -650,7 +650,8 @@
     sheet.innerHTML =
       '<div class="sheet-title">' + esc(opts.title) + '</div>' +
       (opts.message ? '<div class="fin-sub">' + esc(opts.message) + '</div>' : '') +
-      '<button class="btn btn-block sheet-danger" id="sheet-ok" type="button">' +
+      '<button class="btn btn-block ' + (opts.danger === false ? 'btn-primary' : 'sheet-danger') +
+      '" id="sheet-ok" type="button">' +
       esc(opts.confirmLabel || 'Confirm') + '</button>' +
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
     document.body.appendChild(backdrop);
@@ -1632,7 +1633,9 @@
         barHTML = '<button class="btn btn-primary btn-block" id="act-start" type="button">' + I.play + '<span>Start Workout</span></button>';
       }
     } else if (r.status === 'active') {
-      barHTML = '<button class="btn btn-primary btn-block btn-stop" id="act-finish" type="button">' + I.stop + '<span>Finish Workout</span></button>';
+      twoButtonBar = true;
+      barHTML = '<button class="btn btn-primary btn-block btn-stop" id="act-finish" type="button">' + I.stop + '<span>Finish Workout</span></button>' +
+        '<button class="btn btn-ghost btn-block" id="act-abandon" type="button">Abandon</button>';
     }
     if (barHTML) {
       const bar = document.createElement('div');
@@ -1669,10 +1672,49 @@
 
     const startBtn = document.getElementById('act-start');
     if (startBtn) startBtn.onclick = () => {
+      // Multiple concurrent actives are allowed but warned about: the
+      // stale one keeps ticking and records an absurd duration.
+      const other = routines.find((x) => x.id !== r.id && x.status === 'active');
+      if (other) {
+        openConfirmSheet({
+          title: 'Another workout is active',
+          message: '"' + other.name + '" is still active and keeps its timer. Start this one too?',
+          confirmLabel: 'Start anyway',
+          danger: false,
+          onConfirm: () => {
+            r.status = 'active';
+            r.startedAt = Date.now();
+            scheduleSave(r, true);
+            render();
+          },
+        });
+        return;
+      }
       r.status = 'active';
       r.startedAt = Date.now();
       scheduleSave(r, true);
       render();
+    };
+
+    const abandonBtn = document.getElementById('act-abandon');
+    if (abandonBtn) abandonBtn.onclick = () => {
+      openConfirmSheet({
+        title: 'Abandon workout',
+        message: 'Stop tracking and put "' + r.name + '" back as scheduled? Nothing is logged as done.',
+        confirmLabel: 'Abandon',
+        onConfirm: () => {
+          stopRest();
+          cancelPendingSave(r.id);
+          r.status = 'scheduled';
+          r.startedAt = null;
+          r.endedAt = null;
+          r.exercises.forEach((ex) => ex.sets.forEach((s) => { s.done = false; }));
+          bestEpleyCache.clear();
+          scheduleSave(r, true);
+          stopTimer();
+          render();
+        },
+      });
     };
 
     const finBtn = document.getElementById('act-finish');
