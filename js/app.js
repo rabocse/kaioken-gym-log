@@ -2891,6 +2891,18 @@
     r.createdAt = toNum(r.createdAt) || Date.now();
     r.startedAt = toNum(r.startedAt);
     r.endedAt = toNum(r.endedAt);
+    // A started workout needs a start time and a finished one an end
+    // time, or the timer card renders NaN and charts plot off-canvas:
+    // derive them from the creation time / the workout date.
+    if (r.status === 'active' && !r.startedAt) {
+      r.startedAt = toNum(r.createdAt) || Date.now();
+    }
+    if (r.status === 'completed' && !r.endedAt) {
+      const p = String(r.date || '').split('-').map(Number);
+      r.endedAt = (p.length === 3 && p[0])
+        ? new Date(p[0], p[1] - 1, p[2], 12).getTime()
+        : Date.now();
+    }
     r.supps = r.supps === true ? true : r.supps === false ? false : null;
     r.bodyWeight = toNum(r.bodyWeight);
     r.bwUnit = r.bwUnit === 'lb' ? 'lb' : 'kg';
@@ -2937,6 +2949,49 @@
       '</div>';
   }
 
+  // Restores settings from an imported backup envelope: each key is
+  // validated exactly like the app-init path. The background photo is
+  // never part of an export (megabytes of base64) and stays device-local.
+  function applySettings(s) {
+    if (!s || typeof s !== 'object') return;
+    const put = (key, value) =>
+      store.setSetting(key, value).catch((e) => console.error('Kaioken:', e));
+    if (s.rest === 60 || s.rest === 90 || s.rest === 120) {
+      settings.rest = s.rest;
+      put('rest', s.rest);
+    }
+    if (THEMES[s.theme]) {
+      applyTheme(s.theme);
+      put('theme', s.theme);
+    }
+    if (BG_STYLES.indexOf(s.bgStyle) !== -1) {
+      settings.bgStyle = s.bgStyle;
+      applyBgStyle(s.bgStyle);
+      put('bgStyle', s.bgStyle);
+    }
+    if (s.photoFit === 'fit' || s.photoFit === 'fill') {
+      settings.photoFit = s.photoFit;
+      applyPhotoFit(s.photoFit);
+      put('photoFit', s.photoFit);
+    }
+    if (s.suppsLast === true || s.suppsLast === false) {
+      settings.suppsLast = s.suppsLast;
+      put('suppsLast', s.suppsLast);
+    }
+    if (s.bwUnit === 'kg' || s.bwUnit === 'lb') {
+      settings.bwUnit = s.bwUnit;
+      put('bwUnit', s.bwUnit);
+    }
+    if (s.homeChart && typeof s.homeChart === 'object' && s.homeChart.tab) {
+      settings.homeChart = s.homeChart;
+      put('homeChart', s.homeChart);
+    }
+    if (Array.isArray(s.homeOrder)) {
+      settings.homeOrder = s.homeOrder;
+      put('homeOrder', s.homeOrder);
+    }
+  }
+
   function renderSettings() {
     const restOptions = [
       { secs: 60, label: '1 min' },
@@ -2944,7 +2999,22 @@
       { secs: 120, label: '2 min' },
     ];
     const exportText = JSON.stringify(
-      { app: 'kaioken', version: 1, exportedAt: new Date().toISOString(), routines: routines },
+      {
+        app: 'kaioken',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        routines: routines,
+        settings: {
+          rest: settings.rest,
+          theme: settings.theme,
+          bgStyle: settings.bgStyle,
+          photoFit: settings.photoFit,
+          suppsLast: settings.suppsLast,
+          bwUnit: settings.bwUnit,
+          homeChart: settings.homeChart,
+          homeOrder: settings.homeOrder,
+        },
+      },
       null, 2
     );
     $app.innerHTML =
@@ -2994,7 +3064,7 @@
       '<p class="hint">Starts automatically when you mark a set as done during a workout. You can skip it any time.</p>' +
       '</div>' +
       '<div class="card">' +
-      '<p class="hint">Your routines are stored only on this device. Export regularly and keep a copy somewhere safe (Notes, email, cloud storage). Paste a backup below to restore it or move it to a new phone.</p>' +
+      '<p class="hint">Your routines and settings (except the background photo, which stays on this device) are stored only on this device. Export regularly and keep a copy somewhere safe (Notes, email, cloud storage). Paste a backup below to restore it or move it to a new phone.</p>' +
       '<label class="field"><span>Export (copy this text)</span>' +
       '<textarea id="ta-export" rows="10" spellcheck="false">' + esc(exportText) + '</textarea></label>' +
       '<button class="btn btn-ghost btn-block" id="act-copy" type="button">Copy to Clipboard</button>' +
@@ -3095,25 +3165,47 @@
       const list = (incoming || [])
         .filter((x) => x && typeof x === 'object' && !Array.isArray(x))
         .map(sanitizeRoutine);
-      if (!list.length) {
+      if (!list.length && !(data && data.settings)) {
         openAlertSheet({ title: 'Import failed', message: 'No routines found in the backup.' });
         return;
       }
-      let added = 0;
-      let updated = 0;
-      for (const ir of list) {
-        const idx = routines.findIndex((x) => x.id === ir.id);
-        if (idx >= 0) {
-          routines[idx] = ir;
-          updated++;
-        } else {
-          routines.push(ir);
-          added++;
+      const apply = async () => {
+        let added = 0;
+        let updated = 0;
+        for (const ir of list) {
+          const idx = routines.findIndex((x) => x.id === ir.id);
+          if (idx >= 0) {
+            routines[idx] = ir;
+            updated++;
+          } else {
+            routines.push(ir);
+            added++;
+          }
+          await store.put(ir);
         }
-        await store.put(ir);
+        if (data && data.settings) applySettings(data.settings);
+        toast('Imported ' + added + ' new, updated ' + updated);
+        go('home');
+      };
+      if (!list.length) {
+        await apply();
+        return;
       }
-      toast('Imported ' + added + ' new, updated ' + updated);
-      go('home');
+      // Overwrites are the dangerous half of a merge: show what would be
+      // replaced before anything is written, instead of counting after.
+      const replacing = list.filter((ir) => routines.some((x) => x.id === ir.id));
+      openConfirmSheet({
+        title: 'Import backup',
+        message: (replacing.length
+          ? 'Overwrites ' + replacing.length + ' existing routine' +
+            (replacing.length === 1 ? '' : 's') + ' (' +
+            replacing.slice(0, 3).map((ir) => ir.name).join(', ') +
+            (replacing.length > 3 ? ', \u2026' : '') + '). '
+          : '') +
+          'Adds ' + (list.length - replacing.length) + ' new.',
+        confirmLabel: 'Import',
+        onConfirm: apply,
+      });
     };
   }
 
