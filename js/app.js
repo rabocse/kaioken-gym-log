@@ -286,8 +286,13 @@
   // 'bg' (boolean) is the legacy setting from before styles existed.
   const BG_STYLES = ['off', 'texture', 'photo'];
 
+  // Only genuine photo data URLs ever reach the CSS url() token: anything
+  // else (a future writer, imported settings, a debug path) is rejected
+  // instead of being injected into the stylesheet.
+  const PHOTO_RE = /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+$/;
+
   function applyPhoto(dataUrl) {
-    settings.photo = dataUrl || '';
+    settings.photo = (typeof dataUrl === 'string' && PHOTO_RE.test(dataUrl)) ? dataUrl : '';
     const s = document.documentElement.style;
     if (settings.photo) {
       s.setProperty('--bg-photo', 'url("' + settings.photo + '")');
@@ -296,36 +301,61 @@
     }
   }
 
-  // Downscale with a canvas and store as a data URL, so the photo lives
-  // only on this device (IndexedDB) and works offline.
-  function loadPhotoFile(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const max = 1290;
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (ctx) ctx.drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        if (!dataUrl || dataUrl.length < 32) return;
-        store.setSetting('photo', dataUrl)
-          .catch((e) => console.error('Kaioken: setting save failed', e));
-        applyPhoto(dataUrl);
-        applyBgStyle('photo');
-        render();
+  // Fallback decoder for engines without createImageBitmap.
+  function decodeViaImg(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('decode failed'));
+        img.src = String(reader.result || '');
       };
-      img.onerror = () => {};
-      img.src = String(reader.result || '');
-    };
-    reader.onerror = () => {};
-    reader.readAsDataURL(file);
+      reader.onerror = () => reject(new Error('read failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Downscale with a canvas and store as a data URL, so the photo lives
+  // only on this device (IndexedDB) and works offline. Decoding goes
+  // through createImageBitmap with EXIF orientation applied, so iPhone
+  // portraits render upright; every failure surfaces as a toast instead
+  // of being swallowed.
+  async function loadPhotoFile(file) {
+    if (!file) return;
+    if (!file.type || String(file.type).indexOf('image/') !== 0) {
+      toast('That does not look like an image');
+      return;
+    }
+    let bmp;
+    try {
+      bmp = window.createImageBitmap
+        ? await createImageBitmap(file, { imageOrientation: 'from-image' })
+        : await decodeViaImg(file);
+    } catch (e) {
+      toast('Could not load that image');
+      return;
+    }
+    const max = 1290;
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) bmp.close();
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    if (!dataUrl || dataUrl.length < 32) {
+      toast('Could not load that image');
+      return;
+    }
+    store.setSetting('photo', dataUrl)
+      .catch((e) => console.error('Kaioken: setting save failed', e));
+    applyPhoto(dataUrl);
+    applyBgStyle('photo');
+    render();
   }
 
   function pickPhoto() {
