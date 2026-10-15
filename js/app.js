@@ -252,7 +252,9 @@
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
     let count = 0;
     routines.forEach((r) => {
-      if (r.status === 'completed' && (r.endedAt || 0) >= weekAgo) count++;
+      if (r.status !== 'completed') return;
+      const d = routineDate(r);
+      if (d && d.getTime() >= weekAgo) count++;
     });
     return Math.min(4, count);
   }
@@ -760,6 +762,7 @@
       stopRest();
       r.status = 'completed';
       r.endedAt = Date.now();
+      r.date = todayISO();
       r.supps = supps;
       r.bodyWeight = bw;
       r.bwUnit = bwUnit;
@@ -2110,10 +2113,14 @@
     return (Math.round(v * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
   }
 
+  // One canonical workout date: r.date - the day the workout was scheduled
+  // or performed (stamped with the finish day when a workout ends). endedAt
+  // carries the duration, never the day, so display, the calendar, the
+  // heatmap and the charts all agree.
   function routineDate(r) {
-    if (r.endedAt) return new Date(r.endedAt);
     const p = String(r.date || '').split('-').map(Number);
     if (p.length === 3 && p[0]) return new Date(p[0], p[1] - 1, p[2]);
+    if (r.endedAt) return new Date(r.endedAt);
     return null;
   }
 
