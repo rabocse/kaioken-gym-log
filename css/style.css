@@ -1048,6 +1048,10 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
 .linesvg .pbar { fill: var(--accent); opacity: 0.85; }
 .linesvg .pbar.sel { fill: var(--text); opacity: 1; }
 .linesvg .pbar, .linesvg .vpt { cursor: pointer; }
+.linesvg .pt:focus, .linesvg .pbar:focus, .linesvg .vpt:focus { outline: 2px solid var(--text); outline-offset: 2px; }
+.btn-move { opacity: 0.55; }
+.btn-move:disabled { opacity: 0.25; cursor: default; }
+.btn-move svg { width: 16px; height: 16px; }
 .linesvg .area { fill: var(--accent-area); }
 
 .theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }

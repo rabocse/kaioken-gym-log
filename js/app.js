@@ -147,6 +147,8 @@
     chart: '<svg ' + A + '><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
     copy: '<svg ' + A + '><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>',
     edit: '<svg ' + A + '><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>',
+    up: '<svg ' + A + '><path d="M18 15l-6-6-6 6"/></svg>',
+    down: '<svg ' + A + '><path d="M6 9l6 6 6-6"/></svg>',
   };
 
   /* ---------- autocomplete suggestions ---------- */
@@ -566,9 +568,26 @@
   // ignored, no matter how late it arrives; the next real tap works.
   let sheetGestureLock = false;
 
+  let sheetFocusBack = null;
+
   function closeSheet() {
     sheetGestureLock = false;
     document.querySelectorAll('#sheet-backdrop, #sheet').forEach((n) => n.remove());
+    // dialogs return focus to whatever opened them, so keyboard users are
+    // not dropped back at the top of the page
+    if (sheetFocusBack && sheetFocusBack.focus) {
+      try { sheetFocusBack.focus(); } catch (err) {}
+      sheetFocusBack = null;
+    }
+  }
+
+  // Every sheet mounts through here: the first control receives focus so
+  // the sheet is operable from a keyboard without a pointer event.
+  function mountSheet(backdrop, sheet) {
+    sheetFocusBack = document.activeElement || null;
+    mountSheet(backdrop, sheet);
+    const first = sheet.querySelector('button, input');
+    if (first && first.focus) first.focus();
   }
 
   function openSheet(r) {
@@ -589,8 +608,7 @@
       '<button class="btn btn-block" id="sheet-dup" type="button">' + I.copy + '<span>Repeat as New</span></button>' +
       '<button class="btn btn-block sheet-danger" id="sheet-del" type="button">' + I.trash + '<span>Delete</span></button>' +
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
-    document.body.appendChild(backdrop);
-    document.body.appendChild(sheet);
+    mountSheet(backdrop, sheet);
     backdrop.onclick = guard(closeSheet);
     document.getElementById('sheet-cancel').onclick = guard(closeSheet);
     document.getElementById('sheet-ren').onclick = guard(() => {
@@ -654,8 +672,7 @@
       '" id="sheet-ok" type="button">' +
       esc(opts.confirmLabel || 'Confirm') + '</button>' +
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
-    document.body.appendChild(backdrop);
-    document.body.appendChild(sheet);
+    mountSheet(backdrop, sheet);
     backdrop.onclick = guard(closeSheet);
     document.getElementById('sheet-cancel').onclick = guard(closeSheet);
     document.getElementById('sheet-ok').onclick = guard(() => {
@@ -684,8 +701,7 @@
       '<button class="btn btn-block btn-primary" id="sheet-ok" type="button">' +
       esc(opts.okLabel || 'OK') + '</button>' +
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
-    document.body.appendChild(backdrop);
-    document.body.appendChild(sheet);
+    mountSheet(backdrop, sheet);
     const input = document.getElementById('sheet-input');
     const ok = guard(() => {
       const v = input.value;
@@ -719,8 +735,7 @@
       (opts.message ? '<div class="fin-sub">' + esc(opts.message) + '</div>' : '') +
       '<button class="btn btn-block btn-primary" id="sheet-ok" type="button">' +
       esc(opts.okLabel || 'OK') + '</button>';
-    document.body.appendChild(backdrop);
-    document.body.appendChild(sheet);
+    mountSheet(backdrop, sheet);
     backdrop.onclick = guard(closeSheet);
     document.getElementById('sheet-ok').onclick = guard(closeSheet);
   }
@@ -768,8 +783,7 @@
       '</div>' +
       '<button class="btn btn-primary btn-block" id="fin-ok" type="button">Finish Workout</button>' +
       '<button class="btn btn-ghost btn-block" id="fin-cancel" type="button">Cancel</button>';
-    document.body.appendChild(backdrop);
-    document.body.appendChild(sheet);
+    mountSheet(backdrop, sheet);
 
     let bwUnit = settings.bwUnit === 'lb' ? 'lb' : 'kg';
     const bwIn = document.getElementById('fin-bw');
@@ -1270,7 +1284,7 @@
       '</div>';
   }
 
-  function exerciseCardHTML(ex, editable, active) {
+  function exerciseCardHTML(ex, editable, active, movable) {
     const cardio = isCardioEx(ex);
     if (!editable) {
       const lines = ex.sets.map((s, j) => {
@@ -1356,6 +1370,10 @@
         : '') +
       '<input class="ex-name" placeholder="Exercise name" value="' + esc(ex.name) + '" maxlength="48" autocomplete="off" autocapitalize="words">' +
       unitSeg +
+      (movable
+        ? '<button class="btn btn-icon btn-move btn-move-up" type="button" aria-label="Move exercise up">' + I.up + '</button>' +
+          '<button class="btn btn-icon btn-move btn-move-down" type="button" aria-label="Move exercise down">' + I.down + '</button>'
+        : '') +
       '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.x + '</button>' +
       '</div>' +
       '<div class="sug-box" hidden></div>' +
@@ -1605,7 +1623,8 @@
         activeOpenEx = null;
       }
     }
-    const exCards = r.exercises.map((ex) => exerciseCardHTML(ex, editable, activeView)).join('');
+    const exCards = r.exercises.map((ex) =>
+      exerciseCardHTML(ex, editable, activeView, editable && r.exercises.length > 1)).join('');
 
     $app.innerHTML =
       '<header class="topbar">' +
@@ -1741,6 +1760,32 @@
       const ex = r.exercises.find((e) => e.id === card.dataset.eid);
       if (!ex) return;
       if (editable && r.exercises.length > 1) attachExDrag(card, r);
+
+      // Keyboard path for reordering: small up/down buttons next to the
+      // delete x, disabled at the top/bottom.
+      const upBtn = card.querySelector('.btn-move-up');
+      const downBtn = card.querySelector('.btn-move-down');
+      const exIdx = r.exercises.findIndex((e) => e.id === ex.id);
+      if (upBtn) {
+        upBtn.disabled = exIdx <= 0;
+        upBtn.onclick = () => {
+          if (exIdx <= 0) return;
+          r.exercises.splice(exIdx, 1);
+          r.exercises.splice(exIdx - 1, 0, ex);
+          scheduleSave(r, true);
+          render();
+        };
+      }
+      if (downBtn) {
+        downBtn.disabled = exIdx >= r.exercises.length - 1;
+        downBtn.onclick = () => {
+          if (exIdx >= r.exercises.length - 1) return;
+          r.exercises.splice(exIdx, 1);
+          r.exercises.splice(exIdx + 1, 0, ex);
+          scheduleSave(r, true);
+          render();
+        };
+      }
 
       const foldBtn = card.querySelector('.btn-fold');
       if (foldBtn) foldBtn.onclick = () => {
@@ -2049,8 +2094,7 @@
         ).join('')
       ).join('') +
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
-    document.body.appendChild(backdrop);
-    document.body.appendChild(sheet);
+    mountSheet(backdrop, sheet);
     backdrop.onclick = guard(closeSheet);
     document.getElementById('sheet-cancel').onclick = guard(closeSheet);
     sheet.querySelectorAll('.opts-item').forEach((b) => {
@@ -2421,6 +2465,19 @@
     render();
   }
 
+  // Keyboard-operable chart points: Enter/Space trigger the same handler
+  // as a tap, so charts stay reachable without a pointer.
+  function keyActivatable(el) {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'button');
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (el.onclick) el.onclick();
+      }
+    });
+  }
+
   function bindProgression() {
     const selEl = document.getElementById('sel-ex');
     if (selEl) selEl.onchange = () => {
@@ -2431,6 +2488,7 @@
     bindChartOpts('btn-ex-opts', 'Chart options', exOptsGroups, applyExOpt);
     $app.querySelectorAll('.pt, .pbar').forEach((el) => {
       el.onclick = () => { statsPointSel = Number(el.dataset.i); render(); };
+      keyActivatable(el);
     });
   }
 
@@ -2803,6 +2861,7 @@
     });
     $app.querySelectorAll('.vpt').forEach((el) => {
       el.onclick = () => { statsSelKey = el.dataset.w; render(); };
+      keyActivatable(el);
     });
   }
 
@@ -2958,10 +3017,12 @@
     if (cfg.tab === 'progression') {
       $app.querySelectorAll('.home-chart .pt, .home-chart .pbar').forEach((el) => {
         el.onclick = () => { homeSel.point = Number(el.dataset.i); render(); };
+        keyActivatable(el);
       });
     } else if (cfg.tab === 'volume') {
       $app.querySelectorAll('.home-chart .col, .home-chart .vpt').forEach((el) => {
         el.onclick = () => { homeSel.key = el.dataset.w; render(); };
+        if (el.classList.contains('vpt')) keyActivatable(el);
       });
     } else {
       $app.querySelectorAll('.home-chart .hcell').forEach((el) => {
@@ -3313,6 +3374,26 @@
   // it may still emit a stray click when it ends, which must be ignored.
   document.addEventListener('pointerdown', () => { sheetGestureLock = false; }, true);
   document.addEventListener('touchstart', () => { sheetGestureLock = false; }, true);
+
+  // Sheets work from a keyboard: Escape closes, Tab stays trapped inside.
+  document.addEventListener('keydown', (e) => {
+    const sheet = document.getElementById('sheet');
+    if (!sheet) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeSheet(); return; }
+    if (e.key !== 'Tab') return;
+    const focusables = Array.prototype.slice.call(
+      sheet.querySelectorAll('button, input')).filter((el) => !el.disabled);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    const inside = active && sheet.contains(active);
+    if (e.shiftKey) {
+      if (!inside || active === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (!inside || active === last) { e.preventDefault(); first.focus(); }
+    }
+  });
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
