@@ -585,7 +585,8 @@
   // the sheet is operable from a keyboard without a pointer event.
   function mountSheet(backdrop, sheet) {
     sheetFocusBack = document.activeElement || null;
-    mountSheet(backdrop, sheet);
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
     const first = sheet.querySelector('button, input');
     if (first && first.focus) first.focus();
   }
