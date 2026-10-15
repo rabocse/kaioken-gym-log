@@ -7,6 +7,17 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.7.1] - 2026-10-15
+
+### Fixed
+- Every bottom sheet (chart options, confirmations, rename, import,
+  finish) was dead since 1.7.0: the new sheet-mounting helper called
+  itself instead of attaching the sheet, so tapping those buttons did
+  nothing. Reproduced and verified end-to-end in a real headless browser
+  (options apply, rename flow) after the fix.
+- The long-press sheet (Rename / Repeat as New / Delete) now opens on
+  scheduled and active routine entries too, not only on finished ones.
+
 ## [1.7.0] - 2026-10-15
 
 ### Added

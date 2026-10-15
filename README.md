@@ -43,7 +43,7 @@ No App Store, no account, no server — your data stays on your phone.
   title opens Stats on that graph
 - Every home section (calendar, pinned chart, New Routine, Active,
   Scheduled, History) is hold-and-drag reorderable; the layout persists
-- Repeat or delete past workouts by holding them (or right-clicking): long-press action sheet
+- Rename, repeat or delete any workout (scheduled, active or past) by holding it (or right-clicking): long-press action sheet
 - History of completed routines grouped by month (collapsible); past workouts are dimmed
 - Home: a compact last-7-days calendar strip with a dot on each day you finished a workout (the same 7 days the Kaioken theme watches); tap it to unfold the full month
 - Exercise and routine name autocomplete (in-app picker; iOS ignores <datalist>)
