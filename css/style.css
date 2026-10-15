@@ -1169,6 +1169,7 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
 }
 .sheet-danger { color: var(--danger); }
 .fin-sub { text-align: center; color: var(--muted); font-size: 13.5px; margin: -2px 0 6px; }
+.fin-warn { color: var(--danger); }
 .fin-row {
   display: flex;
   align-items: center;

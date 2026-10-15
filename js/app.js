@@ -710,9 +710,16 @@
     const sheet = document.createElement('div');
     sheet.id = 'sheet';
     sheet.setAttribute('role', 'dialog');
+    const finWarnN = r.exercises.reduce((n, ex) =>
+      n + ex.sets.filter((s) => !s.done &&
+        (s.reps != null || s.weight != null || s.mins != null || s.dist != null)).length, 0);
     sheet.innerHTML =
       '<div class="sheet-title">Finish workout?</div>' +
       '<div class="fin-sub">Recorded duration ' + fmtFull(Date.now() - r.startedAt) + '</div>' +
+      (finWarnN
+        ? '<div class="fin-sub fin-warn">' + finWarnN +
+        (finWarnN === 1 ? ' set is' : ' sets are') + ' not marked done \u2014 finish anyway?</div>'
+        : '') +
       '<div class="fin-row">' +
       '<span>Creatine / protein today?</span>' +
       '<label class="switch"><input type="checkbox" id="fin-supps"' +
