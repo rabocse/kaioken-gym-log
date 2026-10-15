@@ -562,14 +562,19 @@
     backdrop.onclick = guard(closeSheet);
     document.getElementById('sheet-cancel').onclick = guard(closeSheet);
     document.getElementById('sheet-ren').onclick = guard(() => {
-      const nm = prompt('Rename routine', r.name);
-      if (nm == null) return;
-      const name = String(nm).trim().slice(0, 60);
-      if (!name || name === r.name) return;
-      r.name = name;
-      scheduleSave(r, true);
-      closeSheet();
-      render();
+      openPromptSheet({
+        title: 'Rename routine',
+        label: 'Name',
+        value: r.name,
+        okLabel: 'Rename',
+        onOk: (nm) => {
+          const name = String(nm).trim().slice(0, 60);
+          if (!name || name === r.name) return;
+          r.name = name;
+          scheduleSave(r, true);
+          render();
+        },
+      });
     });
     document.getElementById('sheet-dup').onclick = guard(() => {
       closeSheet();
@@ -580,13 +585,111 @@
       go('routine', { id: copy.id });
     });
     document.getElementById('sheet-del').onclick = guard(() => {
-      if (!confirm('Delete "' + r.name + '"? This cannot be undone.')) return;
-      closeSheet();
-      cancelPendingSave(r.id);
-      store.del(r.id).catch((e) => console.error('Kaioken:', e));
-      routines = routines.filter((x) => x.id !== r.id);
-      render();
+      openConfirmSheet({
+        title: 'Delete workout',
+        message: 'Delete "' + r.name + '"? This cannot be undone.',
+        confirmLabel: 'Delete',
+        onConfirm: () => {
+          cancelPendingSave(r.id);
+          store.del(r.id).catch((e) => console.error('Kaioken:', e));
+          routines = routines.filter((x) => x.id !== r.id);
+          render();
+        },
+      });
     });
+  }
+
+  // In-app confirmation/prompt/alert sheets. The native alert/confirm/
+  // prompt dialogs have a long history of silently no-op'ing in iOS
+  // Home-Screen (standalone) web apps, so every destructive action and
+  // piece of feedback goes through the app's own, reliable sheet system.
+  function openConfirmSheet(opts) {
+    closeSheet();
+    sheetGestureLock = true;
+    const guard = (fn) => () => {
+      if (sheetGestureLock) return;
+      fn();
+    };
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">' + esc(opts.title) + '</div>' +
+      (opts.message ? '<div class="fin-sub">' + esc(opts.message) + '</div>' : '') +
+      '<button class="btn btn-block sheet-danger" id="sheet-ok" type="button">' +
+      esc(opts.confirmLabel || 'Confirm') + '</button>' +
+      '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('sheet-cancel').onclick = guard(closeSheet);
+    document.getElementById('sheet-ok').onclick = guard(() => {
+      closeSheet();
+      opts.onConfirm();
+    });
+  }
+
+  function openPromptSheet(opts) {
+    closeSheet();
+    sheetGestureLock = true;
+    const guard = (fn) => () => {
+      if (sheetGestureLock) return;
+      fn();
+    };
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">' + esc(opts.title) + '</div>' +
+      '<label class="field"><span>' + esc(opts.label || 'Name') + '</span>' +
+      '<input id="sheet-input" maxlength="60" autocomplete="off" value="' + esc(opts.value || '') + '">' +
+      '</label>' +
+      '<button class="btn btn-block btn-primary" id="sheet-ok" type="button">' +
+      esc(opts.okLabel || 'OK') + '</button>' +
+      '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+    const input = document.getElementById('sheet-input');
+    const ok = guard(() => {
+      const v = input.value;
+      closeSheet();
+      opts.onOk(v);
+    });
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('sheet-cancel').onclick = guard(closeSheet);
+    document.getElementById('sheet-ok').onclick = ok;
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); ok(); }
+    });
+    input.focus();
+    input.select();
+  }
+
+  function openAlertSheet(opts) {
+    closeSheet();
+    sheetGestureLock = true;
+    const guard = (fn) => () => {
+      if (sheetGestureLock) return;
+      fn();
+    };
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">' + esc(opts.title) + '</div>' +
+      (opts.message ? '<div class="fin-sub">' + esc(opts.message) + '</div>' : '') +
+      '<button class="btn btn-block btn-primary" id="sheet-ok" type="button">' +
+      esc(opts.okLabel || 'OK') + '</button>';
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('sheet-ok').onclick = guard(closeSheet);
   }
 
   // Finish check-in: before a workout is recorded as completed, a sheet
@@ -1493,13 +1596,19 @@
 
     document.getElementById('act-back').onclick = () => go('home');
     document.getElementById('act-del').onclick = () => {
-      if (!confirm('Delete this routine? This cannot be undone.')) return;
-      stopRest();
-      cancelPendingSave(r.id);
-      store.del(r.id).catch((e) => console.error(e));
-      routines = routines.filter((x) => x.id !== r.id);
-      stopTimer();
-      go('home');
+      openConfirmSheet({
+        title: 'Delete routine',
+        message: 'Delete this routine? This cannot be undone.',
+        confirmLabel: 'Delete',
+        onConfirm: () => {
+          stopRest();
+          cancelPendingSave(r.id);
+          store.del(r.id).catch((e) => console.error(e));
+          routines = routines.filter((x) => x.id !== r.id);
+          stopTimer();
+          go('home');
+        },
+      });
     };
 
     const saveBtn = document.getElementById('act-save');
@@ -1709,10 +1818,22 @@
       updateExStats();
 
       card.querySelector('.btn-del-ex').onclick = () => {
-        if (ex.sets.length && !confirm('Remove "' + (ex.name || 'this exercise') + '" and its sets?')) return;
-        r.exercises = r.exercises.filter((e) => e.id !== ex.id);
-        scheduleSave(r, true);
-        render();
+        if (!ex.sets.length) {
+          r.exercises = r.exercises.filter((e) => e.id !== ex.id);
+          scheduleSave(r, true);
+          render();
+          return;
+        }
+        openConfirmSheet({
+          title: 'Remove exercise',
+          message: 'Remove "' + (ex.name || 'this exercise') + '" and its sets? This cannot be undone.',
+          confirmLabel: 'Remove',
+          onConfirm: () => {
+            r.exercises = r.exercises.filter((e) => e.id !== ex.id);
+            scheduleSave(r, true);
+            render();
+          },
+        });
       };
 
       card.querySelector('.btn-add-set').onclick = () => {
@@ -2965,7 +3086,7 @@
       try {
         data = JSON.parse(document.getElementById('ta-import').value);
       } catch (e) {
-        alert('That does not look like valid JSON.');
+        openAlertSheet({ title: 'Import failed', message: 'That does not look like valid JSON.' });
         return;
       }
       const incoming = Array.isArray(data)
@@ -2975,7 +3096,7 @@
         .filter((x) => x && typeof x === 'object' && !Array.isArray(x))
         .map(sanitizeRoutine);
       if (!list.length) {
-        alert('No routines found in the backup.');
+        openAlertSheet({ title: 'Import failed', message: 'No routines found in the backup.' });
         return;
       }
       let added = 0;
