@@ -706,7 +706,9 @@ input[type="date"] {
   left: 0;
   right: 0;
   z-index: 60;
-  padding: 10px 16px;
+  /* Clear the notch/status bar: the app opts into viewport-fit=cover and
+     a black-translucent status bar, so the top inset is real (#56). */
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
   background: var(--danger);
   color: #16181d;
   font-size: 14px;
