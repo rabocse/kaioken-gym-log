@@ -1250,15 +1250,23 @@
       let b1 = 0;
       let b2 = 0;
       let s1 = null;
-      routines.forEach((r) => r.exercises.forEach((ex) => {
+      routines.forEach((r) => {
+        // Personal records are performed work only (#37): typing planned
+        // weights into a never-started (scheduled) routine used to raise
+        // the baseline and strip the flame from real lifts, and a set is
+        // only performed once it is marked done.
+        if (r.status === 'scheduled') return;
+        r.exercises.forEach((ex) => {
         if (String(ex.name || '').trim().toLowerCase() !== key) return;
         ex.sets.forEach((s) => {
           if (s.warmup) return;
+          if (!s.done) return;
           const e = epleyKg(ex, s);
           if (e > b1) { b2 = b1; b1 = e; s1 = s; }
           else if (e > b2) { b2 = e; }
         });
-      }));
+        });
+      });
       bestEpleyCache.set(key, { b1: b1, b2: b2, s1: s1 });
     }
     const top = bestEpleyCache.get(key);
