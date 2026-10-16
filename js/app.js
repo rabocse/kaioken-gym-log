@@ -3050,7 +3050,10 @@
 
   /* ---------- backup / restore ---------- */
   function toNum(v) {
-    if (v === '' || v == null || typeof v === 'boolean') return null;
+    if (v === '' || v == null) return null;
+    // Numbers and numeric strings only: Number([5]) is 5, so an imported
+    // "reps": [5] would otherwise silently become 5 (#35).
+    if (typeof v !== 'number' && typeof v !== 'string') return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
@@ -3169,7 +3172,11 @@
       settings.bwUnit = s.bwUnit;
       put('bwUnit', s.bwUnit);
     }
-    if (s.homeChart && typeof s.homeChart === 'object' && s.homeChart.tab) {
+    // A pinned chart with an unknown tab renders through the fall-through
+    // branch as the muscles chart and persists across reloads (#35):
+    // accept only the tabs the app can actually display.
+    if (s.homeChart && typeof s.homeChart === 'object' &&
+        ['progression', 'volume', 'heatmap'].indexOf(s.homeChart.tab) !== -1) {
       settings.homeChart = s.homeChart;
       put('homeChart', s.homeChart);
     }
