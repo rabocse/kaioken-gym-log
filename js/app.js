@@ -650,6 +650,10 @@
         message: 'Delete "' + r.name + '"? This cannot be undone.',
         confirmLabel: 'Delete',
         onConfirm: () => {
+          // Deleting the routine this rest timer belongs to must stop it,
+          // like finish and abandon already do (#38) - the bar lives on
+          // document.body and deliberately survives render().
+          stopRest();
           cancelPendingSave(r.id);
           store.del(r.id).catch((e) => console.error('Kaioken:', e));
           routines = routines.filter((x) => x.id !== r.id);
