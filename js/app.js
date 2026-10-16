@@ -1243,9 +1243,9 @@
   // name while that exercise's own values are being edited.
   const bestEpleyCache = new Map();
 
-  function bestEpleyByName(name, excludeSet) {
+  function bestEpleyTop(name) {
     const key = String(name || '').trim().toLowerCase();
-    if (!key) return 0;
+    if (!key) return null;
     if (!bestEpleyCache.has(key)) {
       let b1 = 0;
       let b2 = 0;
@@ -1263,20 +1263,40 @@
           if (!s.done) return;
           const e = epleyKg(ex, s);
           if (e > b1) { b2 = b1; b1 = e; s1 = s; }
-          else if (e > b2) { b2 = e; }
+          // b2 is the best value strictly below the top: a set tying the
+          // best must not promote the runner-up to the top value (#39),
+          // or the tie strips the flame from every set including the
+          // standing best.
+          else if (e > b2 && e < b1 - 1e-9) { b2 = e; }
         });
         });
       });
       bestEpleyCache.set(key, { b1: b1, b2: b2, s1: s1 });
     }
-    const top = bestEpleyCache.get(key);
+    return bestEpleyCache.get(key);
+  }
+
+  function bestEpleyByName(name, excludeSet) {
+    const top = bestEpleyTop(name);
+    if (!top) return 0;
     return (excludeSet && excludeSet === top.s1) ? top.b2 : top.b1;
   }
 
   const isRecordSet = (ex, s) => {
     if (s.warmup) return false;
     const e = epleyKg(ex, s);
-    return e > 0 && e > bestEpleyByName(ex.name, s) + 1e-9;
+    if (e <= 0) return false;
+    const top = bestEpleyTop(ex.name);
+    if (!top || !top.b1) return false;
+    // Ties at the top are records too (#39): repeating your best set
+    // exactly used to extinguish the flame on every set, including the
+    // standing best. A set is a record when it strictly beats the
+    // standing best, or ties it while that top strictly beats everything
+    // below it; the standing best itself is only ever compared against
+    // the runner-up.
+    if (s === top.s1) return e > top.b2 + 1e-9;
+    if (e > top.b1 + 1e-9) return true;
+    return Math.abs(e - top.b1) <= 1e-9 && top.b1 > top.b2 + 1e-9;
   };
 
   function workSetNumber(sets, idx) {
