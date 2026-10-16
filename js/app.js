@@ -678,7 +678,18 @@
     document.getElementById('sheet-cancel').onclick = guard(closeSheet);
     document.getElementById('sheet-ok').onclick = guard(() => {
       closeSheet();
-      opts.onConfirm();
+      // Sheet actions run fire-and-forget: an async onConfirm (import,
+      // delete, abandon) that rejects must not become an unhandled
+      // rejection the user never hears about (#33).
+      Promise.resolve()
+        .then(opts.onConfirm)
+        .catch((err) => {
+          console.error('Kaioken: sheet action failed', err);
+          openAlertSheet({
+            title: 'Action failed',
+            message: 'Something went wrong and the action did not complete. Reload the app and check the latest state before retrying.',
+          });
+        });
     });
   }
 
@@ -3348,9 +3359,26 @@
           if (seen.has(ir.id)) ir.id = uid();
           seen.add(ir.id);
         }
+        // Write to the database before touching the in-memory list, and
+        // merge only what actually landed (#33): a failed put used to
+        // leave the session showing routines the database never received
+        // - they silently vanished on the next reload - with no feedback
+        // of any kind.
+        const saved = [];
+        let failed = false;
+        for (const ir of list) {
+          try {
+            await store.put(ir);
+            saved.push(ir);
+          } catch (err) {
+            console.error('Kaioken: import write failed', err);
+            failed = true;
+            break;
+          }
+        }
         let added = 0;
         let updated = 0;
-        for (const ir of list) {
+        for (const ir of saved) {
           const idx = routines.findIndex((x) => x.id === ir.id);
           if (idx >= 0) {
             routines[idx] = ir;
@@ -3359,7 +3387,15 @@
             routines.push(ir);
             added++;
           }
-          await store.put(ir);
+        }
+        if (failed) {
+          if (saved.length) render();
+          openAlertSheet({
+            title: 'Import incomplete',
+            message: 'A write failed midway: only ' + saved.length + ' of ' +
+              list.length + ' routines were saved. The rest were not imported. Reload the app, then try again with a smaller backup.',
+          });
+          return;
         }
         if (data && data.settings) applySettings(data.settings);
         toast('Imported ' + added + ' new, updated ' + updated);
