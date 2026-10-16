@@ -3083,6 +3083,13 @@
         ? new Date(p[0], p[1] - 1, p[2], 12).getTime()
         : Date.now();
     }
+    // A finished workout without a start time would render its duration
+    // from the raw end timestamp (~56 years in hours, #34): pre-1.1.0 and
+    // third-party backups commonly omit startedAt. Pin the start to the
+    // end so the duration reads as zero instead.
+    if (r.status === 'completed' && !r.startedAt) {
+      r.startedAt = r.endedAt || Date.now();
+    }
     r.supps = r.supps === true ? true : r.supps === false ? false : null;
     r.bodyWeight = toNum(r.bodyWeight);
     r.bwUnit = r.bwUnit === 'lb' ? 'lb' : 'kg';
