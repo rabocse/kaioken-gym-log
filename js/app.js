@@ -313,7 +313,11 @@
   // Only genuine photo data URLs ever reach the CSS url() token: anything
   // else (a future writer, imported settings, a debug path) is rejected
   // instead of being injected into the stylesheet.
-  const PHOTO_RE = /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+$/;
+  // Only the data URLs loadPhotoFile itself can emit pass: the canvas
+  // always re-encodes to JPEG (#46). Anything wider (svg+xml matched the
+  // old [a-z+]+ shape) is stored as '' - defense in depth before a future
+  // import path ever makes this gate load-bearing.
+  const PHOTO_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
 
   function applyPhoto(dataUrl) {
     settings.photo = (typeof dataUrl === 'string' && PHOTO_RE.test(dataUrl)) ? dataUrl : '';
