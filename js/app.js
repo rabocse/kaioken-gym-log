@@ -1165,7 +1165,7 @@
       '<h1 class="topbar-title">New Routine</h1></header>' +
       '<div class="card">' +
       '<label class="field"><span>Name</span>' +
-      '<input id="in-name" placeholder="e.g. Push Day" maxlength="40" autocomplete="off" autocapitalize="words">' +
+      '<input id="in-name" placeholder="e.g. Push Day" maxlength="60" autocomplete="off" autocapitalize="words">' +
       '<div class="sug-box" id="name-sug" hidden></div></label>' +
       '<label class="field"><span>Date</span>' +
       '<input id="in-date" type="date" value="' + todayISO() + '"></label>' +
