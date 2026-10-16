@@ -36,6 +36,15 @@
         dbPromise = null;
         reject(req.error);
       };
+      // A suspended tab (iOS Safari backgrounds tabs before their JS can
+      // run onversionchange) holding an older connection blocks the
+      // upgrade forever: without this the init chain never settles and
+      // the app hangs on a blank screen with no instruction (#36). The
+      // init catch renders the guidance instead.
+      req.onblocked = () => {
+        dbPromise = null;
+        reject(new Error('Another Kaioken tab is holding an older database open. Close it and reload.'));
+      };
     });
     return dbPromise;
   }
