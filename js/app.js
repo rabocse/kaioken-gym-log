@@ -89,8 +89,10 @@
   const numOrNull = (v) => {
     if (v === '' || v == null) return null;
     const t = String(v).trim();
+    // Anchor the shape before converting (#41): parseFloat would happily
+    // take "1e3" (1000), "0x10" (0) or "10kg" (10).
+    if (!/^\d+([.,]\d+)?$/.test(t)) return null;
     const seps = (t.match(/[.,]/g) || []).length;
-    if (seps > 1) return null;
     if (seps === 1 && /^\d+,\d{3}$/.test(t)) return null;
     const n = parseFloat(t.replace(',', '.'));
     if (!Number.isFinite(n) || n < 0) return null;
