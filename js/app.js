@@ -97,6 +97,17 @@
     return n;
   };
 
+  // A real calendar date in YYYY-MM-DD form: the Date constructor rolls
+  // impossible dates over (2024-02-31 becomes Mar 2), which left display,
+  // storage and grouping disagreeing after autofill/paste/import (#40).
+  // The round-trip check catches every rolled-over date.
+  const validDate = (s) => {
+    if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const p = s.split('-').map(Number);
+    const d = new Date(p[0], p[1] - 1, p[2]);
+    return d.getFullYear() === p[0] && d.getMonth() === p[1] - 1 && d.getDate() === p[2];
+  };
+
   function todayISO() {
     const d = new Date();
     return d.getFullYear() + '-' +
@@ -1166,7 +1177,7 @@
     document.getElementById('act-create').onclick = () => {
       const name = document.getElementById('in-name').value.trim();
       let date = document.getElementById('in-date').value;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = todayISO();
+      if (!validDate(date)) date = todayISO();
       const r = {
         id: uid(),
         name: name || 'Workout',
@@ -3108,8 +3119,7 @@
     r.id = (typeof r.id === 'string' && r.id) ? r.id : uid();
     r.name = (typeof r.name === 'string' && r.name.trim())
       ? r.name.trim().slice(0, 60) : 'Workout';
-    r.date = (typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date))
-      ? r.date : todayISO();
+    r.date = validDate(r.date) ? r.date : todayISO();
     r.status = (r.status === 'active' || r.status === 'completed')
       ? r.status : 'scheduled';
     r.createdAt = toNum(r.createdAt) || Date.now();
