@@ -7,6 +7,41 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.7.2] - 2026-10-15
+
+### Fixed
+- Import hardening: the routine's own `id` is validated like every nested
+  id (numeric ids created dead entries, object ids aborted the import with
+  a DataError), same-backup duplicates get a fresh identity, a failed
+  write is reported in an alert sheet instead of vanishing silently on
+  the next reload (writes now land in the database before the session is
+  mutated), every sheet confirm guards against unhandled rejections, a
+  completed routine without a start time no longer renders a ~56-year
+  duration, array-typed reps/weights are rejected instead of coerced
+  (`Number([5])` is 5), unknown pinned-chart tabs are dropped instead of
+  pinning a phantom Muscles chart, and impossible dates (`2024-02-31`)
+  fall back to today instead of rolling over into the next month.
+- Personal records count performed work only: planned sets in scheduled
+  routines no longer raise the PR baseline and strip the flame from real
+  lifts, and a set that ties your all-time best keeps the flame on every
+  tied set instead of extinguishing all of them (the runner-up now tracks
+  the best strictly below the top).
+- Deleting a routine from the Home long-press sheet now stops its rest
+  timer, like abandon and finish already did.
+- A blocked database upgrade (a suspended background tab holding an older
+  connection) now rejects with guidance instead of hanging the app on a
+  blank screen forever.
+- Weight/reps fields reject exponent/hex/junk-suffixed input ("1e3" as
+  1000, "0x10" as 0, "10kg" as 10) while keeping the comma-decimal
+  locale tolerance from 1.6.1.
+- The background-photo gate accepts only the JPEG data URLs the app itself
+  creates (the old shape admitted `svg+xml`).
+- 12 lines of invalid/dead CSS (merge debris: a selector-less block and
+  duplicated rules) removed from the stylesheet.
+
+### Changed
+- Routine name length caps unified at 60 characters everywhere.
+
 ## [1.7.1] - 2026-10-15
 
 ### Fixed
