@@ -3045,6 +3045,12 @@
   }
 
   function sanitizeRoutine(r) {
+    // The routine's own id is validated exactly like the nested exercise
+    // and set ids: IndexedDB accepts numbers and (for puts) rejects
+    // non-key objects, so a numeric id would render a dead entry (the
+    // DOM round-trip makes it a string again) and an object id would
+    // abort the import with a DataError (#32).
+    r.id = (typeof r.id === 'string' && r.id) ? r.id : uid();
     r.name = (typeof r.name === 'string' && r.name.trim())
       ? r.name.trim().slice(0, 60) : 'Workout';
     r.date = (typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date))
@@ -3333,6 +3339,15 @@
         return;
       }
       const apply = async () => {
+        // Two routines in one backup sharing an id: the second would
+        // silently replace the first in both the session and the
+        // database (#32) - give duplicates a fresh identity so both
+        // survive as separate workouts.
+        const seen = new Set();
+        for (const ir of list) {
+          if (seen.has(ir.id)) ir.id = uid();
+          seen.add(ir.id);
+        }
         let added = 0;
         let updated = 0;
         for (const ir of list) {
