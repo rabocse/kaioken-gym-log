@@ -497,7 +497,12 @@
   window.addEventListener('pagehide', flushPendingSaves);
 
   function go(name, extra) {
-    view = extra ? Object.assign({ name }, extra) : { name };
+    const next = extra ? Object.assign({ name }, extra) : { name };
+    const same = view.name === next.name && view.id === next.id;
+    view = next;
+    if (!same) {
+      try { history.pushState({ view: view }, ''); } catch (err) {}
+    }
     render();
   }
 
@@ -3550,6 +3555,12 @@
     });
   }
 
+  window.addEventListener('popstate', (e) => {
+    const v = e.state && e.state.view && e.state.view.name ? e.state.view : { name: 'home' };
+    view = v;
+    render();
+  });
+
   openDB()
     .then(() => {
       if (navigator.storage && typeof navigator.storage.persist === 'function') {
@@ -3585,6 +3596,9 @@
     .then((v) => { settings.homeOrder = Array.isArray(v) ? v : null; })
     .then(() => store.all())
     .then((rows) => { routines = rows || []; })
+    .then(() => {
+      try { history.replaceState({ view: { name: 'home' } }, ''); } catch (err) {}
+    })
     .then(render)
     .catch((err) => {
       $app.innerHTML = '<div class="card note">Could not open the local database: ' +
