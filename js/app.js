@@ -3,6 +3,26 @@
 
   const APP_VERSION = '1.8.1';
 
+  /* ---------- clickjacking backstop (#45) ---------- */
+  // frame-ancestors cannot be expressed in a <meta> CSP and GitHub Pages
+  // cannot set response headers, so any origin could embed the app and
+  // socially-engineer destructive taps. Same-origin embedding is allowed
+  // (it is no attack surface: a same-origin host already owns the page,
+  // and the test harness and dev previews rely on it); anything else gets
+  // navigated out of the frame, and when the browser blocks that
+  // navigation the document is hidden so the framed copy stays inert.
+  (function frameGuard() {
+    const sameOrigin = () => {
+      try { return new URL(top.location.href).origin === self.location.origin; }
+      catch (err) { return false; }
+    };
+    if (self === top || sameOrigin()) return;
+    try { top.location = self.location.href; } catch (err) { /* nav blocked: hide below */ }
+    setTimeout(() => {
+      if (!sameOrigin()) document.documentElement.style.visibility = 'hidden';
+    }, 0);
+  })();
+
   /* ---------- local database (IndexedDB) ---------- */
   const DB_NAME = 'gymlog';
   const DB_VERSION = 2;
@@ -506,6 +526,40 @@
     render();
   }
 
+  // Heat cells, volume segments, breakdown dots and theme swatches carry
+  // their colors and sizes as data attributes and get painted here via
+  // the CSSOM after every render (#45): the CSP has no 'unsafe-inline'
+  // in style-src, and script-set style properties are outside its scope
+  // while style="" attributes in markup are not.
+  function paintGeneratedStyles(root) {
+    root.querySelectorAll('.hcell[data-op]').forEach((el) => {
+      const c = GYMLOG_CAT_COLORS[el.dataset.cat];
+      if (!c) return;
+      el.style.background = c;
+      el.style.opacity = el.dataset.op;
+    });
+    root.querySelectorAll('.hcells[data-cols]').forEach((el) => {
+      el.style.gridTemplateColumns = 'repeat(' + el.dataset.cols + ', 1fr)';
+    });
+    root.querySelectorAll('.segm[data-h]').forEach((el) => {
+      const c = GYMLOG_CAT_COLORS[el.dataset.cat];
+      if (!c) return;
+      el.style.height = el.dataset.h + '%';
+      el.style.background = c;
+    });
+    root.querySelectorAll('.bd-dot[data-cat]').forEach((el) => {
+      const c = GYMLOG_CAT_COLORS[el.dataset.cat];
+      if (c) el.style.background = c;
+    });
+    root.querySelectorAll('.sw[data-swatch]').forEach((el) => {
+      const t = THEMES[el.dataset.th];
+      if (!t) return;
+      el.style.background = el.dataset.swatch === 'accent' && el.dataset.th === 'kaioken'
+        ? HEAT_LEVELS[computeHeat()].accent
+        : t[el.dataset.swatch];
+    });
+  }
+
   function render() {
     stopTimer();
     bestEpleyCache.clear();
@@ -521,6 +575,7 @@
       case 'stats': renderStats(); break;
       default: renderHome(); break;
     }
+    paintGeneratedStyles($app);
   }
 
   /* ---------- toast ---------- */
@@ -2720,11 +2775,11 @@
         const lvl = Math.max(1, Math.min(4, Math.ceil((v / maxCell) * 4)));
         const op = [0, 0.25, 0.5, 0.75, 1][lvl];
         return '<button class="hcell' + (sel ? ' sel' : '') + '" type="button" data-cat="' + esc(cat) +
-          '" data-w="' + w.key + '" style="background:' + GYMLOG_CAT_COLORS[cat] + ';opacity:' + op + '"' +
+          '" data-w="' + w.key + '" data-op="' + op + '"' +
           ' aria-label="' + esc(cat) + ', ' + per + fmtDay(w.key) + ': ' + fmtVol(v) + '"></button>';
       }).join('');
       return '<div class="hrow"><span class="hlabel">' + esc(cat) + '</span>' +
-        '<div class="hcells" style="grid-template-columns: repeat(' + buckets.length + ', 1fr)">' + cells + '</div></div>';
+        '<div class="hcells" data-cols="' + buckets.length + '">' + cells + '</div></div>';
     }).join('');
   }
 
@@ -2888,9 +2943,8 @@
     return '<div class="chart">' + data.buckets.map((c) => {
       const segs = GYMLOG_CATS.slice().reverse()
         .filter((cat) => c.cats[cat] > 0)
-        .map((cat) => '<div class="segm" style="height:' +
-          ((c.cats[cat] / data.max) * 100).toFixed(3) + '%;background:' +
-          GYMLOG_CAT_COLORS[cat] + '"></div>')
+        .map((cat) => '<div class="segm" data-cat="' + esc(cat) +
+          '" data-h="' + ((c.cats[cat] / data.max) * 100).toFixed(3) + '"></div>')
         .join('');
       const label = data.monthly
         ? (c.start.getMonth() + 1) + '/' + String(c.start.getFullYear()).slice(-2)
@@ -2912,7 +2966,7 @@
     const rows = GYMLOG_CATS.filter((cat) => sel.cats[cat] > 0).map((cat) => {
       const share = sel.total ? Math.round((sel.cats[cat] / sel.total) * 100) : 0;
       return '<div class="bd-row">' +
-        '<span class="bd-dot" style="background:' + GYMLOG_CAT_COLORS[cat] + '"></span>' +
+        '<span class="bd-dot" data-cat="' + esc(cat) + '"></span>' +
         '<span class="bd-cat">' + esc(cat) + '</span>' +
         '<span class="bd-share">' + share + '%</span>' +
         '<span class="bd-vol">' + fmtVol(sel.cats[cat]) + '</span>' +
@@ -3366,10 +3420,9 @@
         const on = settings.theme === id;
         return '<button class="theme-btn' + (on ? ' on' : '') + '" type="button" data-th="' + id + '">' +
           '<span class="swatches">' +
-          '<span class="sw" style="background:' + t.bg + '"></span>' +
-          '<span class="sw" style="background:' + t.card + '"></span>' +
-          '<span class="sw" style="background:' +
-          (id === 'kaioken' ? HEAT_LEVELS[computeHeat()].accent : t.accent) + '"></span>' +
+          '<span class="sw" data-th="' + id + '" data-swatch="bg"></span>' +
+          '<span class="sw" data-th="' + id + '" data-swatch="card"></span>' +
+          '<span class="sw" data-th="' + id + '" data-swatch="accent"></span>' +
           '</span>' +
           '<span class="theme-name">' + t.label + '</span>' +
           '<span class="sw-check">' + I.check + '</span>' +
