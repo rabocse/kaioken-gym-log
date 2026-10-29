@@ -35,16 +35,22 @@ No App Store, no account, no server — your data stays on your phone.
     working set, warm-ups excluded), spaced by actual date — Line or Bar,
     Discrete dots or Continuous curve with area fill
   - Muscles: training volume by muscle group as a **radar chart** (the
-    previous equal range overlaid dashed for comparison) or the classic
-    heatmap
+    previous equal range overlaid dashed for comparison, ring scale
+    labeled) or the classic heatmap
   - Volume: weekly (or monthly) totals as stacked bars by muscle group or
     a line/area trend; tap a column or point for the breakdown
+  - Every value chart shows a Y axis with round tick labels that rescale
+    to the data (unit on the top tick; the bar chart's gutter lines up
+    with the bars)
 - Pin any chart to Home from its options sheet: it stays interactive
   there, its options sheet edits and persists the pin, and tapping its
   title opens Stats on that graph
 - Every home section (calendar, pinned chart, New Routine, Active,
   Scheduled, History) is hold-and-drag reorderable; the layout persists
 - Rename, repeat or delete any workout (scheduled, active or past) by holding it (or right-clicking): long-press action sheet — or the ⋯ button in the routine view
+- Share a finished routine as an image highlight: a 1080×1350 card in your
+  theme (top sets, PRs, volume) via the system share sheet, with a
+  Save image / Copy text fallback where files cannot be shared
 - Change a scheduled or active routine's date from the routine view (completed workouts keep their date)
 - Back button / swipe-back work: navigation pushes history instead of exiting the PWA
 - History of completed routines grouped by month (collapsible); past workouts are dimmed
@@ -52,6 +58,8 @@ No App Store, no account, no server — your data stays on your phone.
 - Exercise and routine name autocomplete (in-app picker; iOS ignores <datalist>)
 - Named Kaioken — installs and displays as "Kaioken"
 - Works fully offline (service worker + on-device storage)
+- Strict CSP (no inline styles, no third-party sources) and cross-origin
+  embedding is blocked
 - Backup / restore everything as JSON (in Settings)
 
 ## Run locally (development)

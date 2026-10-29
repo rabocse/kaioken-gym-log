@@ -7,6 +7,32 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.9.0] - 2026-10-29
+
+### Added
+- Every value chart has a visible Y axis that adjusts to the data: the
+  progression and volume-trend charts draw round tick labels (nice 1/2/5
+  steps), gridlines and an axis line in a left gutter, with the unit on
+  the top tick; the volume bar chart gains a gutter that mirrors the bar
+  stack so its ticks line up with the segment tops; the radar shows its
+  ring scale. Switching exercise or range rescales the ticks.
+- Share highlight: a finished routine becomes a 1080×1350 (4:5) image
+  card in the active theme — accent bar, name, date and duration, top
+  sets with PR chips, and a volume/sets/PRs panel — shared as a PNG via
+  the system share sheet (Instagram-friendly). Where files cannot be
+  shared, a sheet offers the preview with Save image and Copy text.
+  Entry points: a Share highlight button on completed routines and a row
+  in the long-press action sheet.
+
+### Security
+- CSP hardened: `base-uri 'none'`, `object-src 'none'` and
+  `form-action 'self'` added, and `style-src` dropped `'unsafe-inline'`
+  — all generated inline styles are now painted through the CSSOM from
+  data attributes. Cross-origin embedding is busted (same-origin frames
+  are allowed; blocked navigations hide the document instead), since
+  `frame-ancestors` cannot be expressed in a meta CSP and Pages cannot
+  set response headers.
+
 ## [1.8.1] - 2026-10-29
 
 ### Fixed

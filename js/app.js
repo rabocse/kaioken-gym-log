@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.8.1';
+  const APP_VERSION = '1.9.0';
 
   /* ---------- clickjacking backstop (#45) ---------- */
   // frame-ancestors cannot be expressed in a <meta> CSP and GitHub Pages
