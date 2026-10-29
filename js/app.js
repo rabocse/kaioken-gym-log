@@ -605,9 +605,17 @@
 
   let sheetFocusBack = null;
 
+  let sheetVV = null;
+
   function closeSheet() {
     sheetGestureLock = false;
     if ($app && $app.inert) $app.inert = false;
+    if (sheetVV && window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', sheetVV.onVV);
+      window.visualViewport.removeEventListener('scroll', sheetVV.onVV);
+      sheetVV.cancel();
+      sheetVV = null;
+    }
     document.querySelectorAll('#sheet-backdrop, #sheet').forEach((n) => n.remove());
     // dialogs return focus to whatever opened them, so keyboard users are
     // not dropped back at the top of the page
@@ -627,6 +635,25 @@
     if ($app && 'inert' in $app) $app.inert = true;
     const first = sheet.querySelector('button, input');
     if (first && first.focus) first.focus();
+    if (window.visualViewport) {
+      let tid = 0;
+      const apply = () => {
+        tid = 0;
+        const vv = window.visualViewport;
+        const overlap = sheet.getBoundingClientRect().bottom - (vv.height + vv.offsetTop);
+        sheet.style.transform = overlap > 1 ? 'translateY(' + (-Math.ceil(overlap)) + 'px)' : '';
+      };
+      const onVV = () => {
+        if (tid) cancelAnimationFrame(tid);
+        tid = requestAnimationFrame(apply);
+      };
+      const cancel = () => {
+        if (tid) { cancelAnimationFrame(tid); tid = 0; }
+      };
+      window.visualViewport.addEventListener('resize', onVV);
+      window.visualViewport.addEventListener('scroll', onVV);
+      sheetVV = { onVV: onVV, cancel: cancel };
+    }
   }
 
   function openSheet(r) {
