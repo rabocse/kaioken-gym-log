@@ -171,6 +171,7 @@
     edit: '<svg ' + A + '><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>',
     up: '<svg ' + A + '><path d="M18 15l-6-6-6 6"/></svg>',
     down: '<svg ' + A + '><path d="M6 9l6 6 6-6"/></svg>',
+    dots: '<svg ' + A + '><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>',
   };
 
   /* ---------- autocomplete suggestions ---------- */
@@ -1718,6 +1719,7 @@
       '<header class="topbar">' +
       '<button class="btn btn-icon" id="act-back" aria-label="Back">' + I.back + '</button>' +
       '<h1 class="topbar-title">' + esc(r.name) + '</h1>' +
+      '<button class="btn btn-icon" id="act-more" aria-label="More actions">' + I.dots + '</button>' +
       '<button class="btn btn-icon btn-danger" id="act-del" aria-label="Delete routine">' + I.trash + '</button>' +
       '</header>' +
       statusCardHTML(r) +
@@ -1754,6 +1756,7 @@
     }
 
     document.getElementById('act-back').onclick = () => go('home');
+    document.getElementById('act-more').onclick = () => openSheet(r);
     document.getElementById('act-del').onclick = () => {
       openConfirmSheet({
         title: 'Delete routine',
