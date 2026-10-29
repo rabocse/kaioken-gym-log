@@ -680,7 +680,7 @@ input[type="date"] {
 .sum-row + .sum-row { border-top: 1px solid var(--border); }
 
 /* ---------- exercises ---------- */
-.ex-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.ex-head { display: flex; flex-wrap: wrap; row-gap: 4px; gap: 8px; align-items: center; margin-bottom: 10px; }
 .ex-head .ex-name {
   flex: 1;
   font-weight: 700;
