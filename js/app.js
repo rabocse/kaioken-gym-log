@@ -2744,9 +2744,10 @@
   }
 
   function radarInnerHTML(cur, prev, range) {
+    const curLabel = (STATS_RANGES.filter((x) => x.id === range)[0] || {}).label || 'selected range';
     return radarSVG(cur, prev) +
       (prev
-        ? '<div class="cell-detail rlegend"><span class="rkey rkey-cur"></span>selected range' +
+        ? '<div class="cell-detail rlegend"><span class="rkey rkey-cur"></span>' + curLabel +
           '<span class="rkey rkey-prev"></span>previous ' + rangeWord(range) + '</div>'
         : '');
   }
