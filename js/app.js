@@ -192,6 +192,7 @@
     up: '<svg ' + A + '><path d="M18 15l-6-6-6 6"/></svg>',
     down: '<svg ' + A + '><path d="M6 9l6 6 6-6"/></svg>',
     dots: '<svg ' + A + '><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>',
+    share: '<svg ' + A + '><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
   };
 
   /* ---------- autocomplete suggestions ---------- */
@@ -731,6 +732,9 @@
     sheet.setAttribute('role', 'dialog');
     sheet.innerHTML =
       '<div class="sheet-title">' + esc(r.name) + '</div>' +
+      (r.status === 'completed' && shareableRoutine(r)
+        ? '<button class="btn btn-block" id="sheet-share" type="button">' + I.share + '<span>Share highlight</span></button>'
+        : '') +
       '<button class="btn btn-block" id="sheet-ren" type="button">' + I.edit + '<span>Rename</span></button>' +
       '<button class="btn btn-block" id="sheet-dup" type="button">' + I.copy + '<span>Repeat as New</span></button>' +
       '<button class="btn btn-block sheet-danger" id="sheet-del" type="button">' + I.trash + '<span>Delete</span></button>' +
@@ -738,6 +742,8 @@
     mountSheet(backdrop, sheet);
     backdrop.onclick = guard(closeSheet);
     document.getElementById('sheet-cancel').onclick = guard(closeSheet);
+    const shareBtn = document.getElementById('sheet-share');
+    if (shareBtn) shareBtn.onclick = guard(() => { shareHighlight(r); });
     document.getElementById('sheet-ren').onclick = guard(() => {
       openPromptSheet({
         title: 'Rename routine',
@@ -1819,6 +1825,10 @@
         ? '<label class="field rdate"><span>Date</span><input type="date" id="in-rdate" value="' + esc(r.date) + '"></label>'
         : '') +
       statusCardHTML(r) +
+      (r.status === 'completed' && shareableRoutine(r)
+        ? '<button class="btn btn-primary btn-block" id="act-share" type="button">' + I.share +
+          '<span>Share highlight</span></button>'
+        : '') +
       '<div class="section-label">Exercises</div>' +
       (exCards || '<div class="empty">No exercises yet. Add your first one below.</div>') +
       (editable ? '<button class="btn btn-ghost btn-block" id="act-add-ex" type="button">+ Add Exercise</button>' : '') +
@@ -1853,6 +1863,8 @@
 
     document.getElementById('act-back').onclick = () => go('home');
     document.getElementById('act-more').onclick = () => openSheet(r);
+    const shareAct = document.getElementById('act-share');
+    if (shareAct) shareAct.onclick = () => shareHighlight(r);
     const rdateEl = document.getElementById('in-rdate');
     if (rdateEl) {
       rdateEl.onchange = () => {
@@ -3134,6 +3146,324 @@
       el.onclick = () => { statsSelKey = el.dataset.w; render(); };
       keyActivatable(el);
     });
+  }
+
+  /* ---------- share highlight (#67) ---------- */
+  // A finished routine becomes a 1080x1350 (4:5) image card in the active
+  // theme, shared through the Web Share API when it accepts files (the
+  // file is built synchronously so the share call stays inside the tap
+  // gesture - iOS drops async-built shares) and offered as a preview with
+  // save/copy actions otherwise.
+
+  const SHARE_W = 1080;
+  const SHARE_H = 1350;
+  const SHARE_FONT = '-apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+  // A highlight needs at least one working set with weight and reps.
+  function shareableRoutine(r) {
+    return r.exercises.some((ex) => ex.sets.some((s) =>
+      !s.warmup && s.reps != null && s.weight != null));
+  }
+
+  // Headline numbers for the card and the text summary. Volume follows the
+  // app's single choke point (setVolumeKg, warm-ups excluded); PRs count
+  // performed sets only.
+  function shareStats(r) {
+    const dur = (r.endedAt || 0) - (r.startedAt || 0);
+    let workSets = 0;
+    let volume = 0;
+    let prs = 0;
+    r.exercises.forEach((ex) => {
+      ex.sets.forEach((s) => {
+        if (s.warmup || s.reps == null || s.weight == null) return;
+        workSets++;
+        volume += setVolumeKg(ex, s);
+        if (s.done && isRecordSet(ex, s)) prs++;
+      });
+    });
+    return { dur: dur, workSets: workSets, volume: volume, prs: prs };
+  }
+
+  // One row per exercise: heaviest working set (the same "top set" rule
+  // as the progression chart) plus its working-set count.
+  function shareRows(r) {
+    return r.exercises.map((ex) => {
+      let best = null;
+      let work = 0;
+      ex.sets.forEach((s) => {
+        if (s.warmup) return;
+        if (s.reps == null || s.weight == null) return;
+        work++;
+        const wkg = s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1);
+        if (!best || wkg > best.wkg) best = { wkg: wkg, reps: s.reps };
+      });
+      if (!best) return null;
+      const pr = ex.sets.some((s) => s.done && isRecordSet(ex, s));
+      return {
+        name: ex.name,
+        unit: ex.unit || 'kg',
+        weight: ex.unit === 'lb' ? best.wkg / LB_TO_KG : best.wkg,
+        reps: best.reps,
+        sets: work,
+        pr: pr,
+      };
+    }).filter(Boolean);
+  }
+
+  function shareText(r, st, rows) {
+    const lines = [
+      r.name + ' \u2014 ' + fmtDate(r.date),
+      fmtFull(st.dur) + ' \u00b7 ' + st.workSets + (st.workSets === 1 ? ' set' : ' sets') +
+        ' \u00b7 ' + fmtVol(st.volume),
+    ];
+    if (st.prs) lines.push(st.prs + (st.prs === 1 ? ' PR' : ' PRs'));
+    if (rows.length) {
+      lines.push(rows.slice(0, 8).map((e) =>
+        e.name + ' ' + fmt1(e.weight) + e.unit + '\u00d7' + e.reps).join(', ') +
+        (rows.length > 8 ? ' \u2026' : ''));
+    }
+    return lines.join('\n');
+  }
+
+  function renderShareCard(r, st, rows) {
+    const cv = document.createElement('canvas');
+    cv.width = SHARE_W;
+    cv.height = SHARE_H;
+    const ctx = cv.getContext('2d');
+    const cs = getComputedStyle(document.documentElement);
+    const col = (name) => cs.getPropertyValue(name).trim();
+    const bg = col('--bg') || '#0f1316';
+    const card = col('--card') || '#161c23';
+    const text = col('--text') || '#e7ecf3';
+    const muted = col('--muted') || '#8d9aab';
+    const border = col('--border') || '#26303b';
+    const accent = col('--accent') || '#34d399';
+    const M = 72;
+    const W = SHARE_W;
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, SHARE_W, SHARE_H);
+    ctx.fillStyle = accent;
+    ctx.fillRect(0, 0, W, 14);
+
+    const fit = (str, font, maxW) => {
+      ctx.font = font;
+      if (ctx.measureText(str).width <= maxW) return str;
+      let s = str;
+      while (s.length > 1 && ctx.measureText(s + '\u2026').width > maxW) s = s.slice(0, -1);
+      return s.trimEnd() + '\u2026';
+    };
+
+    let y = 152;
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    try { ctx.letterSpacing = '8px'; } catch (err) {}
+    ctx.font = '700 30px ' + SHARE_FONT;
+    ctx.fillStyle = accent;
+    ctx.fillText('KAIOKEN', M, y);
+    try { ctx.letterSpacing = '0px'; } catch (err) {}
+
+    // Routine name on up to two lines.
+    ctx.font = '800 74px ' + SHARE_FONT;
+    ctx.fillStyle = text;
+    const nameWords = String(r.name || 'Workout').split(/\s+/);
+    const line1Max = W - 2 * M;
+    let l1 = '';
+    let l2 = '';
+    nameWords.forEach((w) => {
+      const probe = (l1 ? l1 + ' ' : '') + w;
+      if (!l1 && ctx.measureText(probe).width > line1Max && l1 === '' && !l2) {
+        // single word longer than a line: hard-fit it
+        l1 = fit(probe, '800 74px ' + SHARE_FONT, line1Max);
+        return;
+      }
+      if (!l2) {
+        if (ctx.measureText(probe).width <= line1Max) l1 = probe;
+        else l2 = w;
+      } else if (ctx.measureText(l2 + ' ' + w).width <= line1Max) {
+        l2 = l2 + ' ' + w;
+      }
+    });
+    if (l2) l2 = fit(l2, '800 74px ' + SHARE_FONT, line1Max);
+    y += 92;
+    ctx.fillText(l1, M, y);
+    if (l2) { y += 88; ctx.fillText(l2, M, y); }
+
+    y += 64;
+    ctx.font = '400 34px ' + SHARE_FONT;
+    ctx.fillStyle = muted;
+    ctx.fillText(fmtDate(r.date) + '  \u00b7  ' + fmtFull(st.dur), M, y);
+
+    y += 44;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(M, y);
+    ctx.lineTo(W - M, y);
+    ctx.stroke();
+
+    // Exercise rows: name left, top set right, PR chip after the name.
+    const shown = rows.slice(0, 8);
+    y += 78;
+    shown.forEach((e) => {
+      ctx.font = '600 36px ' + SHARE_FONT;
+      ctx.fillStyle = text;
+      const right = fmt1(e.weight) + ' ' + e.unit + ' \u00d7 ' + e.reps;
+      ctx.font = '700 36px ' + SHARE_FONT;
+      const rightW = ctx.measureText(right).width;
+      const chipW = e.pr ? 84 : 0;
+      ctx.font = '600 36px ' + SHARE_FONT;
+      const name = fit(e.name, '600 36px ' + SHARE_FONT, W - 2 * M - rightW - 28 - chipW);
+      ctx.fillText(name, M, y);
+      if (e.pr) {
+        const cx = M + ctx.measureText(name).width + 24;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(cx, y - 44, 66, 40, 10);
+        else ctx.rect(cx, y - 44, 66, 40);
+        ctx.fillStyle = accent;
+        ctx.fill();
+        ctx.font = '700 24px ' + SHARE_FONT;
+        ctx.fillStyle = bg;
+        ctx.fillText('PR', cx + 18, y - 16);
+      }
+      ctx.font = '700 36px ' + SHARE_FONT;
+      ctx.fillStyle = text;
+      ctx.textAlign = 'right';
+      ctx.fillText(right, W - M, y);
+      ctx.textAlign = 'left';
+      y += 74;
+    });
+    if (rows.length > 8) {
+      ctx.font = '400 32px ' + SHARE_FONT;
+      ctx.fillStyle = muted;
+      ctx.fillText('+' + (rows.length - 8) + ' more exercises', M, y);
+      y += 60;
+    }
+
+    // Stats panel pinned above the footer.
+    const panelH = 224;
+    const panelY = SHARE_H - 96 - panelH;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(M, panelY, W - 2 * M, panelH, 28);
+    else ctx.rect(M, panelY, W - 2 * M, panelH);
+    ctx.fillStyle = card;
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.font = '800 60px ' + SHARE_FONT;
+    ctx.fillStyle = accent;
+    ctx.fillText(fmtVol(st.volume), W / 2, panelY + 96);
+    ctx.font = '400 30px ' + SHARE_FONT;
+    ctx.fillStyle = muted;
+    const sub = st.workSets + (st.workSets === 1 ? ' set' : ' sets') +
+      (st.prs ? '  \u00b7  ' + st.prs + (st.prs === 1 ? ' PR' : ' PRs') : '');
+    ctx.fillText(sub, W / 2, panelY + 158);
+    ctx.font = '400 26px ' + SHARE_FONT;
+    ctx.fillStyle = muted;
+    ctx.fillText('Kaioken', W / 2, SHARE_H - 40);
+    ctx.textAlign = 'left';
+    return cv;
+  }
+
+  // data: URL -> File, synchronously: navigator.share must be called in
+  // the user gesture that built the file.
+  function dataURLToFile(dataURL, name) {
+    try {
+      const b64 = String(dataURL).split(',')[1];
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new File([bytes], name, { type: 'image/png' });
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast('Copied'))
+        .catch(() => fallbackCopyText(text));
+      return;
+    }
+    fallbackCopyText(text);
+  }
+
+  function fallbackCopyText(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (err) {}
+    ta.remove();
+    toast(ok ? 'Copied' : 'Copy failed');
+  }
+
+  function openShareSheet(dataURL, text) {
+    closeSheet();
+    sheetGestureLock = true;
+    const guard = (fn) => () => {
+      if (sheetGestureLock) return;
+      fn();
+    };
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">Share highlight</div>' +
+      '<div class="share-preview"><img src="' + dataURL + '" alt="Routine highlight card preview"></div>' +
+      '<button class="btn btn-block" id="share-save" type="button">Save image</button>' +
+      '<button class="btn btn-block" id="share-copy" type="button">Copy text</button>' +
+      '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Close</button>';
+    mountSheet(backdrop, sheet);
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('sheet-cancel').onclick = guard(closeSheet);
+    document.getElementById('share-save').onclick = guard(() => {
+      const a = document.createElement('a');
+      a.href = dataURL;
+      a.download = 'kaioken-highlight.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast('Image saved');
+    });
+    document.getElementById('share-copy').onclick = guard(() => copyText(text));
+  }
+
+  function shareHighlight(r) {
+    const st = shareStats(r);
+    const rows = shareRows(r);
+    const text = shareText(r, st, rows);
+    let cv = null;
+    try { cv = renderShareCard(r, st, rows); } catch (err) { cv = null; }
+    if (!cv) {
+      openAlertSheet({
+        title: 'Share highlight',
+        message: 'The highlight image could not be created.',
+        confirmLabel: 'OK',
+        onConfirm: () => {},
+      });
+      return;
+    }
+    const dataURL = cv.toDataURL('image/png');
+    const file = dataURLToFile(dataURL, 'kaioken-highlight.png');
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], text: text })
+        .then(() => toast('Shared'))
+        .catch((err) => {
+          if (err && err.name === 'AbortError') return;
+          openShareSheet(dataURL, text);
+        });
+      return;
+    }
+    openShareSheet(dataURL, text);
   }
 
   /* ---- home chart pin ---- */

@@ -419,6 +419,17 @@ button, .btn, .btn-icon, .item, .sug, .set-check, .hcell, .col, .seg button,
 input, textarea, select { touch-action: manipulation; }
 #sheet, #sheet-backdrop { overscroll-behavior: contain; }
 
+/* Share highlight preview (#67): the 4:5 card is tall, so it caps at a
+ * fraction of the viewport and the (already scrollable) sheet scrolls. */
+.share-preview {
+  margin: 4px 0 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.share-preview img { display: block; width: 100%; height: auto; max-height: 48vh; object-fit: contain; }
+
 #app {
   max-width: 560px;
   margin: 0 auto;
