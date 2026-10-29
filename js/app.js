@@ -232,6 +232,7 @@
 
   /* ---------- state ---------- */
   let routines = [];
+  let storagePersisted = null;
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
   const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', homeChart: null, homeOrder: null };
@@ -3316,6 +3317,11 @@
       '</div>' +
       '<div class="card">' +
       '<p class="hint">Your routines and settings (except the background photo, which stays on this device) are stored only on this device. Export regularly and keep a copy somewhere safe (Notes, email, cloud storage). Paste a backup below to restore it or move it to a new phone.</p>' +
+      '<p class="hint">' + (storagePersisted === true
+        ? 'Persistent storage is on: the browser should not evict your data automatically. Keep exports anyway.'
+        : storagePersisted === false
+          ? 'Persistent storage was not granted: under storage pressure the browser may erase site data. Export regularly.'
+          : 'Persistent storage is not reported by this browser. Export regularly.') + '</p>' +
       '<label class="field"><span>Export (copy this text)</span>' +
       '<textarea id="ta-export" rows="10" spellcheck="false">' + esc(exportText) + '</textarea></label>' +
       '<button class="btn btn-ghost btn-block" id="act-copy" type="button">Copy to Clipboard</button>' +
@@ -3527,6 +3533,13 @@
   }
 
   openDB()
+    .then(() => {
+      if (navigator.storage && typeof navigator.storage.persist === 'function') {
+        navigator.storage.persist()
+          .then((ok) => { storagePersisted = !!ok; })
+          .catch(() => {});
+      }
+    })
     .then(() => store.getSetting('rest', 120))
     .then((rest) => {
       settings.rest = (typeof rest === 'number' && rest > 0) ? rest : 120;
