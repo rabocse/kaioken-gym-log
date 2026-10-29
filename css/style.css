@@ -1027,6 +1027,31 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
 .col.sel .col-label { color: var(--accent); font-weight: 700; }
 .col.sel .segs { outline: 1px solid var(--accent); outline-offset: 2px; }
 
+/* Y-axis gutter for the volume bar chart (#66): mirrors the .col stack
+ * (total slot + 150px plot + label slot) so ticks align with the bars. */
+.ycol {
+  flex: none;
+  width: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.ycol .yaxis {
+  width: 100%;
+  height: 150px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--border);
+  padding-right: 4px;
+}
+
 .section-label.slim { margin: 2px 0 8px; }
 
 .bd-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 15px; }
@@ -1060,6 +1085,8 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
 .linesvg { width: 100%; height: auto; display: block; }
 .linesvg .axis { fill: var(--muted); font-size: 10px; }
 .linesvg .lbl { fill: var(--text); font-size: 11px; font-weight: 600; }
+.linesvg .ygrid { stroke: var(--border); stroke-width: 1; opacity: 0.55; }
+.linesvg .yaxis-line { stroke: var(--border); stroke-width: 1; }
 .linesvg .pt { cursor: pointer; }
 .linesvg .pbar { fill: var(--accent); opacity: 0.85; }
 .linesvg .pbar.sel { fill: var(--text); opacity: 1; }
@@ -1129,6 +1156,7 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
 .radarsvg .rcur { fill: var(--accent-area); stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
 .radarsvg .rprev { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; stroke-linejoin: round; }
 .rlegend { text-align: center; }
+.radar-scale { text-align: center; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .rkey { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin: 0 6px 2px 14px; vertical-align: middle; }
 .rlegend .rkey:first-child { margin-left: 0; }
 .rkey-cur { background: var(--accent); }

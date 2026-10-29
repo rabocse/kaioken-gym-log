@@ -2448,6 +2448,46 @@
     return (Math.round(v * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
   }
 
+  // Round tick values for a chart axis (#66): a 1/2/5 x 10^n step that
+  // covers [min, max] in roughly `count` intervals. Charts re-scale their
+  // data against the returned lo/hi so points, bars and gridlines all
+  // line up on the ticks. `floor` clamps the lower bound (volume axes
+  // never dip below zero).
+  function niceTicks(min, max, count, floor) {
+    if (!isFinite(min) || !isFinite(max) || min === max) {
+      const pad = Math.max(Math.abs(min || 0) * 0.1, 1);
+      min = (min || 0) - pad;
+      max = (max || 0) + pad;
+    }
+    const raw = (max - min) / Math.max(1, count - 1);
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+    let lo = Math.floor(min / step + 1e-9) * step;
+    if (floor != null && lo < floor) lo = floor;
+    const hi = Math.ceil(max / step - 1e-9) * step;
+    const ticks = [];
+    for (let v = lo; v <= hi + step * 1e-9; v += step) {
+      ticks.push(Math.abs(v) < step * 1e-6 ? 0 : v);
+    }
+    return { lo: lo, hi: hi, step: step, ticks: ticks };
+  }
+
+  // Y axis markup shared by the SVG charts (#66): gridlines at every
+  // tick, tick labels in the left gutter and the axis line itself. The
+  // top tick carries the unit.
+  function svgYAxis(ax, padX, top, base, W, y, fmt, unit) {
+    const parts = ax.ticks.map((t, i) => {
+      const yy = y(t).toFixed(1);
+      return '<line class="ygrid" x1="' + padX + '" y1="' + yy + '" x2="' + (W - 6) +
+        '" y2="' + yy + '"/>' +
+        '<text class="axis ytick" x="' + (padX - 5) + '" y="' + (y(t) + 3.5).toFixed(1) +
+        '" text-anchor="end">' + fmt(t) + (i === ax.ticks.length - 1 && unit ? ' ' + esc(unit) : '') + '</text>';
+    }).join('');
+    return parts +
+      '<line class="yaxis-line" x1="' + padX + '" y1="' + top + '" x2="' + padX + '" y2="' + base + '"/>';
+  }
+
   // One canonical workout date: r.date - the day the workout was scheduled
   // or performed (stamped with the finish day when a workout ends). endedAt
   // carries the duration, never the day, so display, the calendar, the
@@ -2605,18 +2645,15 @@
   }
 
   function progressionSVG(sessions, disps, unit, type, mode, selIdx) {
-    const W = 320, H = 150, padX = 12, top = 26, bot = 24;
+    const W = 320, H = 150, padX = 42, top = 26, bot = 24;
     const n = sessions.length;
     const t0 = sessions[0].ts;
     const t1 = sessions[n - 1].ts;
     const xs = sessions.map((s) =>
-      (n === 1 || t1 <= t0) ? W / 2 : padX + (W - 2 * padX) * ((s.ts - t0) / (t1 - t0)));
-    let min = Math.min.apply(null, disps);
-    let max = Math.max.apply(null, disps);
-    if (min === max) { min = Math.max(0, min - 1); max = max + 1; }
-    const span = (max - min) * 0.08;
-    const lo = min - span;
-    const hi = max + span;
+      (n === 1 || t1 <= t0) ? (W + padX) / 2 : padX + (W - 2 * padX) * ((s.ts - t0) / (t1 - t0)));
+    const ax = niceTicks(Math.min.apply(null, disps), Math.max.apply(null, disps), 3);
+    const lo = ax.lo;
+    const hi = ax.hi;
     const y = (v) => top + (H - top - bot) * (1 - (v - lo) / (hi - lo));
     const pts = sessions.map((s, i) => xs[i].toFixed(1) + ',' + y(disps[i]).toFixed(1));
     const base = (H - bot).toFixed(1);
@@ -2633,7 +2670,7 @@
       '" height="' + Math.max(0, H - bot - y(disps[i])).toFixed(1) + '" rx="2"/>'
     ).join('');
     const lastY = y(disps[n - 1]);
-    const lx = Math.min(W - 30, Math.max(30, xs[n - 1])).toFixed(1);
+    const lx = Math.min(W - 34, Math.max(padX, xs[n - 1])).toFixed(1);
     const ly = (lastY > 42 ? lastY - 12 : lastY + 18).toFixed(1);
     const plot = type === 'bar' ? bars :
       (mode === 'continuous' && n > 1
@@ -2641,12 +2678,14 @@
           '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
         : '') + dots;
 
-    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Top set weight over time">' +
+    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Top set weight over time, ' +
+      fmt1(ax.lo) + ' to ' + fmt1(ax.hi) + ' ' + esc(unit) + '">' +
+      svgYAxis(ax, padX, top, H - bot, W, y, fmt1, unit) +
       plot +
       '<text class="lbl" x="' + lx + '" y="' + ly + '" text-anchor="middle">' +
       fmt1(disps[n - 1]) + ' ' + esc(unit) + '</text>' +
       '<text class="axis" x="' + padX + '" y="' + (H - 8) + '">' + esc(fmtDay(sessions[0].rdate)) + '</text>' +
-      '<text class="axis" x="' + (W - padX) + '" y="' + (H - 8) + '" text-anchor="end">' +
+      '<text class="axis" x="' + (W - 6) + '" y="' + (H - 8) + '" text-anchor="end">' +
       esc(fmtDay(sessions[n - 1].rdate)) + '</text>' +
       '</svg>';
   }
@@ -2820,7 +2859,13 @@
 
   function radarInnerHTML(cur, prev, range) {
     const curLabel = (STATS_RANGES.filter((x) => x.id === range)[0] || {}).label || 'selected range';
+    let max = 0;
+    GYMLOG_CATS.forEach((c) => {
+      max = Math.max(max, cur[c] || 0, prev ? prev[c] || 0 : 0);
+    });
     return radarSVG(cur, prev) +
+      '<div class="radar-scale">Rings 25 / 50 / 75 / 100% \u00b7 scale 0 \u2013 ' +
+      fmtVolCompact(max) + ' kg</div>' +
       (prev
         ? '<div class="cell-detail rlegend"><span class="rkey rkey-cur"></span>' + curLabel +
           '<span class="rkey rkey-prev"></span>previous ' + rangeWord(range) + '</div>'
@@ -2940,11 +2985,26 @@
   function volumeChartHTML(data, selKey, type, mode) {
     const sel = data.byKey[selKey];
     if (type === 'line') return volumeLineSVG(data.buckets, data.monthly, selKey, mode);
-    return '<div class="chart">' + data.buckets.map((c) => {
+    // Bars scale against a round axis maximum (#66): the gutter mirrors
+    // the .col layout (total slot + 150px plot + label slot) so its ticks
+    // line up with the segment tops and bottoms by construction.
+    const ax = niceTicks(0, data.max, 3, 0);
+    const axisMax = ax.hi;
+    const ycol =
+      '<div class="ycol" aria-hidden="true">' +
+      '<span class="col-total">&nbsp;</span>' +
+      '<span class="yaxis">' +
+      '<span>' + fmtVolCompact(axisMax) + '</span>' +
+      '<span>' + fmtVolCompact(axisMax / 2) + '</span>' +
+      '<span>0</span>' +
+      '</span>' +
+      '<span class="col-label">&nbsp;</span>' +
+      '</div>';
+    return '<div class="chart">' + ycol + data.buckets.map((c) => {
       const segs = GYMLOG_CATS.slice().reverse()
         .filter((cat) => c.cats[cat] > 0)
         .map((cat) => '<div class="segm" data-cat="' + esc(cat) +
-          '" data-h="' + ((c.cats[cat] / data.max) * 100).toFixed(3) + '"></div>')
+          '" data-h="' + ((c.cats[cat] / axisMax) * 100).toFixed(3) + '"></div>')
         .join('');
       const label = data.monthly
         ? (c.start.getMonth() + 1) + '/' + String(c.start.getFullYear()).slice(-2)
@@ -3000,18 +3060,15 @@
 
   // Volume totals per bucket as an SVG trend line (line chart mode).
   function volumeLineSVG(buckets, monthly, selKey, mode) {
-    const W = 320, H = 170, padX = 14, top = 18, bot = 24;
+    const W = 320, H = 170, padX = 42, top = 18, bot = 24;
     const n = buckets.length;
     const ts = buckets.map((c) => c.start.getTime());
     const xs = buckets.map((c, i) =>
-      (n === 1 || ts[n - 1] <= ts[0]) ? W / 2 : padX + (W - 2 * padX) * ((ts[i] - ts[0]) / (ts[n - 1] - ts[0])));
+      (n === 1 || ts[n - 1] <= ts[0]) ? (W + padX) / 2 : padX + (W - 2 * padX) * ((ts[i] - ts[0]) / (ts[n - 1] - ts[0])));
     const vals = buckets.map((c) => c.total);
-    let min = Math.min.apply(null, vals);
-    let max = Math.max.apply(null, vals);
-    if (min === max) { min = Math.max(0, min - 1); max = max + 1; }
-    const span = (max - min) * 0.08;
-    const lo = min - span;
-    const hi = max + span;
+    const ax = niceTicks(Math.min.apply(null, vals), Math.max.apply(null, vals), 3, 0);
+    const lo = ax.lo;
+    const hi = ax.hi;
     const y = (v) => top + (H - top - bot) * (1 - (v - lo) / (hi - lo));
     const pts = buckets.map((c, i) => xs[i].toFixed(1) + ',' + y(c.total).toFixed(1));
     const base = (H - bot).toFixed(1);
@@ -3022,21 +3079,23 @@
     ).join('');
     const last = buckets[n - 1];
     const lbl = last.total > 0
-      ? '<text class="lbl" x="' + xs[n - 1].toFixed(1) + '" y="' +
+      ? '<text class="lbl" x="' + Math.min(W - 34, Math.max(padX, xs[n - 1])).toFixed(1) + '" y="' +
         Math.max(y(last.total) - 10, 12).toFixed(1) + '" text-anchor="middle">' +
         fmtVolCompact(last.total) + '</text>'
       : '';
     const blabel = (c) => monthly
       ? c.start.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
       : fmtDay(c.key);
-    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Volume trend">' +
+    return '<svg class="linesvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Volume trend, ' +
+      fmtVolCompact(ax.lo) + ' to ' + fmtVolCompact(ax.hi) + ' kg">' +
+      svgYAxis(ax, padX, top, H - bot, W, y, fmtVolCompact, null) +
       (n > 1 && mode === 'continuous'
         ? '<polygon class="area" points="' + pts.join(' ') + ' ' + xs[n - 1].toFixed(1) + ',' + base + ' ' + xs[0].toFixed(1) + ',' + base + '"/>' +
           '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
         : '') +
       dots + lbl +
       '<text class="axis" x="' + padX + '" y="' + (H - 8) + '">' + esc(blabel(buckets[0])) + '</text>' +
-      '<text class="axis" x="' + (W - padX) + '" y="' + (H - 8) + '" text-anchor="end">' + esc(blabel(last)) + '</text>' +
+      '<text class="axis" x="' + (W - 6) + '" y="' + (H - 8) + '" text-anchor="end">' + esc(blabel(last)) + '</text>' +
       '</svg>';
   }
 
