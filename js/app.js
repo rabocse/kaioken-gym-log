@@ -524,6 +524,8 @@
     if (!el) {
       el = document.createElement('div');
       el.id = 'toast';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
       document.body.appendChild(el);
     }
     el.textContent = msg;
@@ -1079,7 +1081,9 @@
     }
 
     const calDays = workoutDays();
-    const calHTML = '<div id="cal-toggle" class="card cal-card' + (calOpen ? ' open' : '') + '">' +
+    const calHTML = '<div id="cal-toggle" class="card cal-card' + (calOpen ? ' open' : '') +
+      '" tabindex="0" role="button" aria-expanded="' + (calOpen ? 'true' : 'false') +
+      '" aria-label="Toggle workout calendar">' +
       weekStripHTML(calDays) +
       '<span class="cal-chev">' + I.chev + '</span>' +
       (calOpen ? monthGridHTML(calDays) : '') +
@@ -1109,9 +1113,17 @@
       order.map((id) =>
         '<div class="home-sec" data-sec="' + id + '">' + secs[id] + '</div>').join('');
 
-    document.getElementById('cal-toggle').onclick = (ev) => {
+    const calEl = document.getElementById('cal-toggle');
+    calEl.onclick = (ev) => {
       // the month area navigates; only the strip/chevron toggles the fold
       if (ev && ev.target && ev.target.closest && ev.target.closest('.cal-month')) return;
+      calOpen = !calOpen;
+      render();
+    };
+    calEl.onkeydown = (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      if (ev && ev.target && ev.target.closest && ev.target.closest('.cal-month')) return;
+      ev.preventDefault();
       calOpen = !calOpen;
       render();
     };
