@@ -1179,6 +1179,10 @@ body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
   border-bottom: 0;
   border-radius: 16px 16px 0 0;
   animation: sheetup 0.18s ease;
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .sheet-title {
   text-align: center;

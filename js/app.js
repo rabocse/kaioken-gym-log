@@ -641,7 +641,13 @@
         tid = 0;
         const vv = window.visualViewport;
         const overlap = sheet.getBoundingClientRect().bottom - (vv.height + vv.offsetTop);
-        sheet.style.transform = overlap > 1 ? 'translateY(' + (-Math.ceil(overlap)) + 'px)' : '';
+        if (overlap > 1) {
+          sheet.style.transform = 'translateY(' + (-Math.ceil(overlap)) + 'px)';
+          sheet.style.maxHeight = Math.max(200, Math.floor(vv.height - 16)) + 'px';
+        } else {
+          sheet.style.transform = '';
+          sheet.style.maxHeight = '';
+        }
       };
       const onVV = () => {
         if (tid) cancelAnimationFrame(tid);
