@@ -7,6 +7,16 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.8.1] - 2026-10-29
+
+### Fixed
+- Sheets cap at the viewport height (dvh with a vh fallback) and scroll
+  internally. Since 1.8.0's week ranges, chart options sheets stack about
+  a thousand pixels of groups; the sheet anchored to the bottom edge ran
+  past the top of the screen and nothing could scroll. While the on-screen
+  keyboard lifts a sheet it now also shrinks to the visible area, so the
+  lifted sheet scrolls instead of pushing its top off-screen.
+
 ## [1.8.0] - 2026-10-29
 
 ### Added
