@@ -7,6 +7,63 @@ and the manifest (manifest.webmanifest). The service worker derives its
 cache name from the manifest's version on install, so the cache can never
 drift from the app. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.8.0] - 2026-10-29
+
+### Added
+- Date editing: scheduled and active routines show a date field right under
+  the routine title — change it to move a routine between today and
+  upcoming (the action bar flips between Save Routine and Start Workout),
+  and it saves immediately. Completed workouts keep their date immutable
+  so history and stats stay stable.
+- Stats ranges gain Last week, Last 2 weeks and Last 3 weeks — the
+  volume/heatmap charts already bucket weekly for short ranges, so a week
+  is a couple of readable bars.
+- The routine view topbar gets a visible ⋯ button that opens the routine
+  action sheet (Rename / Repeat as New / Delete) — those actions no longer
+  hide behind a long-press nobody discovers.
+- Real back navigation: view changes push history entries, so the hardware
+  Back button and iOS swipe-back return to where you were instead of
+  exiting the PWA.
+- Persistent storage: the app requests `navigator.storage.persist()` at
+  startup and the Settings backup card reports whether the grant landed.
+- Boot skeleton: the shell paints a static Kaioken wordmark while app.js
+  boots instead of a blank screen.
+
+### Fixed
+- iOS/touch polish batch: every interactive control meets a 44px minimum
+  tap target (set circles, delete buttons, segment buttons, calendar nav,
+  heatmap cells, warm-up toggle) with visible `:active` press feedback;
+  taps skip the double-tap-zoom wait (`touch-action: manipulation`) while
+  pinch-zoom keeps working; sheets contain their own scroll and the main
+  scroller no longer chains overscroll into pull-to-refresh.
+- The exercise header row wraps on narrow screens instead of squeezing the
+  name, unit toggle and delete button onto one cramped line.
+- The on-screen keyboard no longer covers bottom sheets: while a sheet is
+  open, `visualViewport` events measure the overlap and lift the sheet
+  clear of the keyboard.
+- The storage-failure banner pads below the iOS status-bar inset, so its
+  text no longer renders behind the clock / Dynamic Island.
+- The radar chart legend names the range actually selected (Last month,
+  Last 3 weeks, ...) instead of the generic "selected range".
+
+### Accessibility
+- Sheets are real modal dialogs: `aria-modal` plus `#app` made inert
+  while open, so screen readers and Tab cannot wander into the page
+  behind them.
+- Toasts announce themselves (`role="status"`, `aria-live="polite"`), and
+  the calendar fold is a real keyboard target (tabindex, role, Enter/Space
+  with `aria-expanded`).
+- The tiniest text is raised to an 11px floor (radar labels, calendar
+  weekday letters, chart column labels), and a `prefers-reduced-motion`
+  rule disables animations for people who asked for that.
+- Settings no longer serializes the entire routine store (photo payloads
+  included) into the DOM on every visit: the export textarea starts empty,
+  a Generate button builds the backup on demand, and Copy builds it first
+  if needed.
+- Dropped the manifest's maskable icon entries — the icons have no
+  maskable safe zone, so Android circle-cropping them looked worse than
+  the any-purpose art.
+
 ## [1.7.2] - 2026-10-15
 
 ### Fixed

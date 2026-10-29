@@ -27,9 +27,10 @@ No App Store, no account, no server — your data stays on your phone.
 - Kaioken theme: runs cold and heats up (Kaio-ken ×1–×20) with your last 7 days of training, with a live level chip on Home
 - Background styles (Settings): subtle generated texture, or one of your own photos (stored on-device, offline, theme-tinted, Fill or Fit), with frosted cards
 - Exercise categories auto-tagged from the built-in catalog (chest, back, legs, ...)
-- Stats screen, three tabs — every graph has a time range (Last month, 3
-  months, 6 months, Last year, All time) and all its options (chart type,
-  style, range) behind one compact button that opens a bottom sheet:
+- Stats screen, three tabs — every graph has a time range (Last week, 2
+  weeks, 3 weeks, month, 3 months, 6 months, Last year, All time) and all
+  its options (chart type, style, range) behind one compact button that
+  opens a bottom sheet:
   - Progression: per-exercise **top set weight** per session (heaviest
     working set, warm-ups excluded), spaced by actual date — Line or Bar,
     Discrete dots or Continuous curve with area fill
@@ -43,7 +44,9 @@ No App Store, no account, no server — your data stays on your phone.
   title opens Stats on that graph
 - Every home section (calendar, pinned chart, New Routine, Active,
   Scheduled, History) is hold-and-drag reorderable; the layout persists
-- Rename, repeat or delete any workout (scheduled, active or past) by holding it (or right-clicking): long-press action sheet
+- Rename, repeat or delete any workout (scheduled, active or past) by holding it (or right-clicking): long-press action sheet — or the ⋯ button in the routine view
+- Change a scheduled or active routine's date from the routine view (completed workouts keep their date)
+- Back button / swipe-back work: navigation pushes history instead of exiting the PWA
 - History of completed routines grouped by month (collapsible); past workouts are dimmed
 - Home: a compact last-7-days calendar strip with a dot on each day you finished a workout (the same 7 days the Kaioken theme watches); tap it to unfold the full month
 - Exercise and routine name autocomplete (in-app picker; iOS ignores <datalist>)
