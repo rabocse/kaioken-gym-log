@@ -1754,6 +1754,9 @@
       '<button class="btn btn-icon" id="act-more" aria-label="More actions">' + I.dots + '</button>' +
       '<button class="btn btn-icon btn-danger" id="act-del" aria-label="Delete routine">' + I.trash + '</button>' +
       '</header>' +
+      (r.status === 'scheduled' || r.status === 'active'
+        ? '<label class="field rdate"><span>Date</span><input type="date" id="in-rdate" value="' + esc(r.date) + '"></label>'
+        : '') +
       statusCardHTML(r) +
       '<div class="section-label">Exercises</div>' +
       (exCards || '<div class="empty">No exercises yet. Add your first one below.</div>') +
@@ -1789,6 +1792,17 @@
 
     document.getElementById('act-back').onclick = () => go('home');
     document.getElementById('act-more').onclick = () => openSheet(r);
+    const rdateEl = document.getElementById('in-rdate');
+    if (rdateEl) {
+      rdateEl.onchange = () => {
+        const v = rdateEl.value;
+        if (!validDate(v)) { toast('Pick a valid date'); render(); return; }
+        if (v === r.date) return;
+        r.date = v;
+        scheduleSave(r, true);
+        render();
+      };
+    }
     document.getElementById('act-del').onclick = () => {
       openConfirmSheet({
         title: 'Delete routine',

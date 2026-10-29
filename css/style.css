@@ -651,6 +651,7 @@ body.has-bar2.has-rest #app { padding-bottom: calc(256px + env(safe-area-inset-b
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .field { display: block; margin-bottom: 14px; }
 .field:last-of-type { margin-bottom: 0; }
+.rdate { margin-bottom: 10px; }
 .field > span { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
 
 input, textarea, select {
