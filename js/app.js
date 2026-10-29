@@ -599,6 +599,7 @@
 
   function closeSheet() {
     sheetGestureLock = false;
+    if ($app && $app.inert) $app.inert = false;
     document.querySelectorAll('#sheet-backdrop, #sheet').forEach((n) => n.remove());
     // dialogs return focus to whatever opened them, so keyboard users are
     // not dropped back at the top of the page
@@ -612,8 +613,10 @@
   // the sheet is operable from a keyboard without a pointer event.
   function mountSheet(backdrop, sheet) {
     sheetFocusBack = document.activeElement || null;
+    sheet.setAttribute('aria-modal', 'true');
     document.body.appendChild(backdrop);
     document.body.appendChild(sheet);
+    if ($app && 'inert' in $app) $app.inert = true;
     const first = sheet.querySelector('button, input');
     if (first && first.focus) first.focus();
   }
