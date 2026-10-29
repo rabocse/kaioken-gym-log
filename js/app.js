@@ -2163,7 +2163,7 @@
   let statsExSel = null;       // progression tab: selected exercise name
   let statsPointSel = null;    // progression tab: selected point index
   let statsCellSel = null;     // heatmap tab: { cat, key }
-  let statsRange = '1m';       // 1m | 3m | 6m | 1y | all
+  let statsRange = '1m';       // 1w | 2w | 3w | 1m | 3m | 6m | 1y | all
   let statsExType = 'line';         // progression: line | bar
   let statsExMode = 'continuous';   // progression line: discrete | continuous
   let statsVolType = 'line';        // volume: bar | line
@@ -2171,6 +2171,9 @@
   let statsMusView = 'radar';       // muscles: heat | radar
 
   const STATS_RANGES = [
+    { id: '1w', label: 'Last week' },
+    { id: '2w', label: 'Last 2 weeks' },
+    { id: '3w', label: 'Last 3 weeks' },
     { id: '1m', label: 'Last month' },
     { id: '3m', label: 'Last 3 months' },
     { id: '6m', label: 'Last 6 months' },
@@ -2252,7 +2255,11 @@
     if (range === 'all') return null;
     const now = new Date();
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (range === '1m') d.setMonth(d.getMonth() - 1);
+    if (range === '1w') d.setDate(d.getDate() - 7);
+    else if (range === '2w') d.setDate(d.getDate() - 14);
+    else if (range === '3w') d.setDate(d.getDate() - 21);
+    else if (range === '1m') d.setMonth(d.getMonth() - 1);
+    else if (range === '3m') d.setMonth(d.getMonth() - 3);
     else if (range === '6m') d.setMonth(d.getMonth() - 6);
     else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
     else d.setMonth(d.getMonth() - 3);
@@ -2303,7 +2310,11 @@
   function prevRangeStart(range, start) {
     if (range === 'all' || !start) return null;
     const d = new Date(start);
-    if (range === '1m') d.setMonth(d.getMonth() - 1);
+    if (range === '1w') d.setDate(d.getDate() - 7);
+    else if (range === '2w') d.setDate(d.getDate() - 14);
+    else if (range === '3w') d.setDate(d.getDate() - 21);
+    else if (range === '1m') d.setMonth(d.getMonth() - 1);
+    else if (range === '3m') d.setMonth(d.getMonth() - 3);
     else if (range === '6m') d.setMonth(d.getMonth() - 6);
     else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
     else d.setMonth(d.getMonth() - 3);
@@ -2312,6 +2323,9 @@
 
   // Human label of a range id, for radar legends and hints.
   function rangeWord(range) {
+    if (range === '1w') return 'week';
+    if (range === '2w') return '2 weeks';
+    if (range === '3w') return '3 weeks';
     if (range === '1m') return 'month';
     if (range === '6m') return '6 months';
     if (range === '1y') return 'year';
