@@ -424,6 +424,17 @@ input, textarea, select { touch-action: manipulation; }
   margin: 0 auto;
   padding: calc(14px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
 }
+.boot {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 
 body.has-bar #app { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 body.has-bar2 #app { padding-bottom: calc(184px + env(safe-area-inset-bottom)); }
