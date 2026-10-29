@@ -412,6 +412,13 @@ body {
 
 input, textarea { -webkit-user-select: text; user-select: text; }
 
+/* ---------- touch ---------- */
+html, body { overscroll-behavior-y: none; }
+button, .btn, .btn-icon, .item, .sug, .set-check, .hcell, .col, .seg button,
+.cal-card, .month-head, .theme-btn, .opts-item, .cal-nav-btn, .chart-title,
+input, textarea, select { touch-action: manipulation; }
+#sheet, #sheet-backdrop { overscroll-behavior: contain; }
+
 #app {
   max-width: 560px;
   margin: 0 auto;
