@@ -3300,7 +3300,7 @@
       { secs: 90, label: '1.5 min' },
       { secs: 120, label: '2 min' },
     ];
-    const exportText = JSON.stringify(
+    const buildExport = () => JSON.stringify(
       {
         app: 'kaioken',
         version: 1,
@@ -3373,7 +3373,8 @@
           ? 'Persistent storage was not granted: under storage pressure the browser may erase site data. Export regularly.'
           : 'Persistent storage is not reported by this browser. Export regularly.') + '</p>' +
       '<label class="field"><span>Export (copy this text)</span>' +
-      '<textarea id="ta-export" rows="10" spellcheck="false">' + esc(exportText) + '</textarea></label>' +
+      '<textarea id="ta-export" rows="10" spellcheck="false" placeholder="Tap Generate to build the backup text"></textarea></label>' +
+      '<button class="btn btn-ghost btn-block" id="act-gen" type="button">Generate Export</button>' +
       '<button class="btn btn-ghost btn-block" id="act-copy" type="button">Copy to Clipboard</button>' +
       '</div>' +
       '<div class="card">' +
@@ -3436,8 +3437,14 @@
       };
     });
 
+    document.getElementById('act-gen').onclick = () => {
+      document.getElementById('ta-export').value = buildExport();
+      toast('Backup text ready');
+    };
+
     document.getElementById('act-copy').onclick = () => {
       const ta = document.getElementById('ta-export');
+      if (!ta.value) ta.value = buildExport();
       ta.focus();
       ta.select();
       const fallback = () => {
