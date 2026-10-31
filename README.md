@@ -106,10 +106,12 @@ Then, on the iPhone:
 
 ## How updates work
 
-The service worker uses a **network-first** strategy: when online you always
-get the latest files (a plain reload picks up new code), and the cache is only
-used as an offline fallback. If you ever serve an old cached copy, reload
-twice — the first reload swaps the service worker, the second gets fresh files.
+The service worker is **stale-while-revalidate**: every launch is answered
+from the offline cache instantly (the gym has no signal), and that copy is
+refreshed in the background — the next launch runs the new release. A deploy
+installs under a new cache name, so old and new files never mix. To pick up a
+deploy immediately, reload twice — the first reload swaps the service worker,
+the second gets fresh files.
 
 ## Where does my data live?
 

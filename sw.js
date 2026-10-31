@@ -1,21 +1,25 @@
 // Kaioken service worker.
 //
-// Strategy: network-first. When online you always get the latest files
-// (code updates appear on the next reload); the cache is only used as an
-// offline fallback. The precache on install makes the app usable offline
-// from the first visit.
+// Strategy: stale-while-revalidate. A launch serves the cached shell
+// instantly (the gym has no signal, and iOS kills standalone apps
+// aggressively, so cold starts are frequent); the copy is refreshed in the
+// background and the next launch gets the fresh bytes. Only a first-ever
+// visit waits on the network.
 //
-// The cache name is derived from the manifest's version on install, so the
-// cache and the app version can never drift apart: bumping the version in
-// manifest.webmanifest is the only change a release needs.
+// The cache name comes from VERSION below, never from another file fetched
+// over the network: a fetch of the manifest could read it out of the HTTP
+// cache (GitHub Pages serves max-age=600) and name the new cache after the
+// old release. A release therefore bumps the version in three places,
+// together: VERSION here, APP_VERSION (js/app.js) and the version in
+// manifest.webmanifest. `npm run verify` fails if they drift apart.
 
-let CACHE = 'kaioken';
+const VERSION = '1.9.1';
+const CACHE = 'kaioken-' + VERSION;
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/style.css',
-  './img/background.jpg',
   './js/catalog.js',
   './js/app.js',
   './icons/icon-192.png',
@@ -25,17 +29,11 @@ const ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    fetch('./manifest.webmanifest')
-      .then((res) => {
-        if (!res.ok) throw new Error('manifest fetch failed: ' + res.status);
-        return res.json();
-      })
-      .then((m) => {
-        if (!m || !m.version) throw new Error('manifest version missing');
-        CACHE = 'kaioken-' + m.version;
-        return caches.open(CACHE);
-      })
-      .then((c) => c.addAll(ASSETS))
+    caches.open(CACHE)
+      // cache: 'reload' bypasses the HTTP cache. GitHub Pages serves
+      // max-age=600, so a deploy inside that window would otherwise
+      // precache the previous release's bytes into the new cache.
+      .then((c) => Promise.all(ASSETS.map((url) => c.add(new Request(url, { cache: 'reload' })))))
       .then(() => self.skipWaiting())
   );
 });
@@ -49,26 +47,60 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const url = new URL(e.request.url);
-        if (res.ok && url.origin === self.location.origin) {
-          // Refresh the cache in the background for offline use. The copy
-          // is chained into waitUntil, or the worker can be terminated
-          // once the response resolves and the cache write is lost.
-          const copy = res.clone();
-          e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, copy)));
-        }
-        return res;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  // Cross-origin requests are not ours to cache: let the network handle them.
+  if (url.origin !== self.location.origin) return;
+
+  if (req.mode === 'navigate') {
+    // Always answer navigations (and their ?_= cache-busting tokens) with
+    // the shell under one key, so the cache cannot grow per token.
+    e.respondWith(
+      caches.match('./index.html').then((cached) => {
+        const refresh = fetch(new Request(req.url, { cache: 'no-cache' })).then((res) => {
+          if (res.ok) {
+            e.waitUntil(caches.open(CACHE).then((c) => c.put('./index.html', res.clone())));
+          }
+          return res;
+        });
+        if (!cached) return refresh.catch(() => Response.error());
+        e.waitUntil(refresh.catch(() => {}));
+        return cached;
       })
-      .catch(() =>
-        caches.match(e.request, { ignoreSearch: true }).then((cached) => {
-          if (cached) return cached;
-          if (e.request.mode === 'navigate') return caches.match('./index.html');
-          return Response.error();
+    );
+    return;
+  }
+
+  // Query strings are never cached or matched: the app uses none today, and
+  // full-URL keys would otherwise grow the cache without bound.
+  if (url.search) return;
+
+  e.respondWith(
+    caches.match(req).then((cached) => {
+      if (cached) {
+        // Refresh behind the returned copy. no-cache skips the HTTP cache,
+        // or the "fresh" copy could be the same stale one for up to 10 min.
+        e.waitUntil(
+          fetch(new Request(req.url, { cache: 'no-cache' }))
+            .then((res) => {
+              if (res.ok) return caches.open(CACHE).then((c) => c.put(req, res));
+            })
+            .catch(() => {})
+        );
+        return cached;
+      }
+      return fetch(req)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            // Chained into waitUntil, or the worker can be terminated once
+            // the response resolves and the cache write is lost.
+            e.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)));
+          }
+          return res;
         })
-      )
+        .catch(() => Response.error());
+    })
   );
 });
