@@ -72,6 +72,20 @@ Requires Go:
 Go is only a local development helper (dev server + icon generator).
 The app itself is pure static files — there is no backend.
 
+### Verify before pushing
+
+The browser harness in `tests/` loads the real app, drives it like a user and
+checks the DOM, charts, CSP, storage and the share card (92 checks). It is
+dev-only tooling: nothing under `tests/` is published.
+
+Requires Node 20+ (once: `npm ci && npx playwright install chromium`):
+
+    npm run verify      # syntax gate + the full harness
+
+That is the exact command CI runs before the GitHub Pages deploy, so a green
+local run means the deploy will not be blocked. See `tests/README.md` for the
+check inventory and how to add one.
+
 ## Put it on your iPhone
 
 The PWA must be served over **HTTPS**. Easiest free option — GitHub Pages:
@@ -127,7 +141,10 @@ Go + SQLite backend can sit behind the same UI — the data model in
     ├── css/style.css
     ├── js/catalog.js         # exercise -> muscle group catalog + chart colors
     ├── js/app.js             # UI + IndexedDB logic
-    └── icons/                # generated PNGs (do not edit by hand)
+    ├── icons/                # generated PNGs (do not edit by hand)
+    ├── package.json          # dev-only: the browser harness entrypoint
+    ├── tests/                # browser harness (not published - see tests/README.md)
+    └── .github/workflows/    # verify, then deploy the app files to Pages
 
 ## Roadmap ideas
 
