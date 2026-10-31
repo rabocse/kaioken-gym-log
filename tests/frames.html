@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>kaioken frame target</title>
+<style>html,body{margin:0;background:#400}iframe{border:0;width:400px;height:800px}</style>
+</head>
+<body>
+<!-- Used by tests/run.js: embeds the app from another origin so the app's
+     frame guard sees a cross-origin parent. -->
+<iframe id="victim"></iframe>
+<script>
+  const src = new URL(location.href).searchParams.get('src');
+  if (src) document.getElementById('victim').src = src;
+</script>
+</body>
+</html>

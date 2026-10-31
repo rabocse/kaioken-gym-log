@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kaioken driver</title>
+<style>
+  html, body { margin: 0; background: #243; }
+  iframe { border: 0; display: block; width: 400px; height: 800px; }
+</style>
+</head>
+<body>
+<!--
+  In-repo browser harness (see tests/README.md).
+
+  It loads the real app in a phone-sized iframe, drives it with real DOM
+  events, and reports every assertion as a beacon request:
+    /tests/beacon/<name>-PASS
+    /tests/beacon/<name>-FAIL--<encoded detail>
+  tests/run.js collects those requests; nothing here depends on the runner.
+  Phase 1 boots the app; each later phase starts from the state the previous
+  one left, so the run is one continuous user session (with one reload).
+-->
+<iframe id="f" width="400" height="800"></iframe>
+<script>
+(function () {
+  'use strict';
+
+  var f = document.getElementById('f');
+  var checks = 0;
+  var fails = 0;
+  var currentPhase = '0';
+
+  function W() { return f.contentWindow; }
+  function D() { return f.contentDocument; }
+  function q(sel, root) { return (root || D()).querySelector(sel); }
+  function qa(sel, root) { return Array.prototype.slice.call((root || D()).querySelectorAll(sel)); }
+  function byId(id) { return q('#' + id); }
+  function txt(el) { return el ? String(el.textContent || '').trim() : ''; }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function B(name, ok, detail) {
+    checks++;
+    // soft-* checks are reported but never fail the run: they encode
+    // rendering/layout expectations that differ between environments.
+    if (!ok && name.indexOf('soft-') !== 0) fails++;
+    var url = 'beacon/' + name + (ok ? '-PASS' : '-FAIL--' + encodeURIComponent(detail == null ? '' : String(detail)));
+    fetch(url).catch(function () {});
+  }
+
+  function phase(n) {
+    currentPhase = String(n);
+    fetch('beacon/PHASE-' + n + '-PASS').catch(function () {});
+  }
+
+  async function until(fn, ms, what) {
+    var t0 = Date.now();
+    var last = null;
+    while (Date.now() - t0 < (ms || 8000)) {
+      try {
+        var v = fn();
+        if (v) return v;
+        last = v;
+      } catch (e) { last = e; }
+      await sleep(50);
+    }
+    throw new Error('timeout waiting for ' + (what || 'condition') + (last ? ' (' + last + ')' : ''));
+  }
+
+  function click(el, noPointer) {
+    if (!el) throw new Error('click: element missing');
+    var w = W();
+    if (!noPointer) {
+      try {
+        el.dispatchEvent(new w.PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      } catch (e) {}
+    }
+    el.click();
+    return el;
+  }
+
+  function key(el, k, extra) {
+    var w = W();
+    var opts = { key: k, bubbles: true, cancelable: true };
+    if (extra) { for (var p in extra) opts[p] = extra[p]; }
+    el.dispatchEvent(new w.KeyboardEvent('keydown', opts));
+  }
+
+  function setVal(el, v) {
+    if (!el) throw new Error('input missing');
+    if (el.focus) el.focus();
+    el.value = v;
+    el.dispatchEvent(new (W().Event)('input', { bubbles: true }));
+  }
+
+  function setChange(el, v) {
+    if (!el) throw new Error('input missing');
+    el.value = v;
+    el.dispatchEvent(new (W().Event)('change', { bubbles: true }));
+  }
+
+  function appErrors() {
+    try { return (W().__kai && W().__kai.errors) || []; } catch (e) { return ['unreadable frame: ' + e.message]; }
+  }
+  function cspViolations() {
+    try { return (W().__kai && W().__kai.csp) || []; } catch (e) { return ['unreadable frame']; }
+  }
+
+  async function loadApp() {
+    var token = '_=' + Date.now();
+    await new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error('iframe load timeout')); }, 15000);
+      f.onload = function () { clearTimeout(t); resolve(); };
+      f.src = '../index.html?' + token;
+    });
+    // The load event can arrive while the old document is still on screen;
+    // wait for the new URL and for its boot render.
+    await until(function () {
+      return W().location.search.indexOf(token) !== -1 &&
+        (byId('act-new') || byId('in-name'));
+    }, 15000, 'app boot');
+  }
+
+  // Writes are IndexedDB puts fired without await by the app; a reload issued
+  // in the same tick can outrun them. Poll the database directly instead of
+  // guessing with a sleep.
+  function idbRoutines() {
+    return new Promise(function (resolve, reject) {
+      var req = W().indexedDB.open('gymlog');
+      req.onerror = function () { reject(req.error); };
+      req.onsuccess = function () {
+        var db = req.result;
+        var tx = db.transaction('routines', 'readonly');
+        var all = tx.objectStore('routines').getAll();
+        all.onsuccess = function () { var rows = all.result || []; db.close(); resolve(rows); };
+        all.onerror = function () { db.close(); reject(all.error); };
+      };
+    });
+  }
+
+  async function waitIdb(pred, ms, what) {
+    var t0 = Date.now();
+    while (Date.now() - t0 < (ms || 8000)) {
+      var rows = await idbRoutines().catch(function () { return []; });
+      if (pred(rows)) return rows;
+      await sleep(100);
+    }
+    throw new Error('timeout waiting for db: ' + (what || 'state'));
+  }
+
+  function iso(dayOffset) {
+    var d = new Date();
+    d.setDate(d.getDate() + dayOffset);
+    var m = String(d.getMonth() + 1);
+    var day = String(d.getDate());
+    return d.getFullYear() + '-' + (m.length < 2 ? '0' + m : m) + '-' + (day.length < 2 ? '0' + day : day);
+  }
+
+  // Completed history as the app itself would export it. Dates are relative
+  // to today so the charts stay inside their default ranges forever.
+  function historyFixture() {
+    var ex = function (id, name, sets, unit, dunit) {
+      return {
+        id: id, name: name, unit: unit || 'kg', dunit: dunit || 'km',
+        sets: sets.map(function (s, i) {
+          return {
+            id: id + '-s' + i, reps: s[0], weight: s[1],
+            mins: s[2] == null ? null : s[2], dist: s[3] == null ? null : s[3],
+            done: true, warmup: false,
+          };
+        }),
+      };
+    };
+    var day = function (offset) {
+      var date = iso(offset);
+      var p = date.split('-').map(Number);
+      var start = new Date(p[0], p[1] - 1, p[2], 18, 0, 0).getTime();
+      return { date: date, createdAt: start, startedAt: start, endedAt: start + 52 * 60 * 1000 };
+    };
+    var r = function (id, name, offset, exercises) {
+      var t = day(offset);
+      return {
+        id: 'fx-' + id, name: name, date: t.date, createdAt: t.createdAt,
+        startedAt: t.startedAt, endedAt: t.endedAt, status: 'completed',
+        supps: true, bodyWeight: 80, bwUnit: 'kg', exercises: exercises,
+      };
+    };
+    return [
+      r('a', 'Push Day', -2, [
+        ex('fx-a-bench', 'Bench Press', [[5, 100], [5, 100], [4, 100]]),
+        ex('fx-a-squat', 'Squat', [[5, 140], [5, 140], [5, 140]]),
+      ]),
+      r('b', 'Pull Day', -9, [
+        ex('fx-b-bench', 'Bench Press', [[5, 105], [5, 105]]),
+        ex('fx-b-row', 'Barbell Row', [[8, 80], [8, 80], [8, 80]]),
+      ]),
+      r('c', 'Upper Body', -16, [
+        ex('fx-c-bench', 'Bench Press', [[3, 110], [3, 110], [3, 110]]),
+        ex('fx-c-curl', 'Curl', [[10, 30], [10, 30], [10, 30]]),
+      ]),
+      r('d', 'Leg Day', -23, [
+        ex('fx-d-squat', 'Squat', [[5, 150], [5, 150]]),
+        ex('fx-d-run', 'Running', [[null, null, 30, 5]], 'kg', 'km'),
+      ]),
+    ];
+  }
+
+  // Two routines sharing an id must both survive the import (#32).
+  function duplicateIdFixture() {
+    var one = historyFixture()[0];
+    var a = JSON.parse(JSON.stringify(one));
+    var b = JSON.parse(JSON.stringify(one));
+    a.id = 'fx-dup-x';
+    b.id = 'fx-dup-x';
+    a.name = 'Dup A';
+    b.name = 'Dup B';
+    return [a, b];
+  }
+
+  async function gotoHome() {
+    if (byId('act-back')) { click(byId('act-back')); await until(function () { return byId('act-new'); }, 8000, 'home'); }
+  }
+
+  async function openSettings() {
+    await gotoHome();
+    click(byId('act-settings'));
+    await until(function () { return byId('act-gen'); }, 8000, 'settings');
+  }
+
+  async function openStats() {
+    await gotoHome();
+    click(byId('act-stats'));
+    await until(function () { return q('.seg-tabs'); }, 8000, 'stats');
+  }
+
+  async function tab(id) {
+    var btn = await until(function () { return q('.seg-tabs button[data-t="' + id + '"]'); }, 4000, 'tab ' + id);
+    click(btn);
+    await sleep(80);
+  }
+
+  async function optItem(k) {
+    var b = await until(function () {
+      return q('#sheet .opts-item[data-k="' + k + '"]');
+    }, 6000, 'option ' + k);
+    click(b);
+    await until(function () { return !byId('sheet'); }, 4000, 'sheet closed');
+  }
+
+  async function openFirstHistoryItem() {
+    await gotoHome();
+    var item = await until(function () { var it = q('.item'); return it; }, 6000, 'history item');
+    click(item);
+    await until(function () { return byId('act-back'); }, 8000, 'routine view');
+  }
+
+  // ---------------------------------------------------------------- phases
+
+  async function phase1() {
+    await until(function () { return byId('act-new'); }, 20000, 'first render');
+
+    B('boot-render', txt(q('#app .topbar h1')) === 'Kaioken', txt(q('#app .topbar h1')));
+    var catText = await fetch('../js/catalog.js').then(function (r) { return r.text(); });
+    var names = (catText.match(/'[^']+': '(Chest|Back|Legs|Quads|Cardio|Other|Biceps|Triceps)'/g) || []).length;
+    B('boot-catalog', names > 100 && catText.indexOf("'Bench Press': 'Chest'") !== -1,
+      'catalog entries: ' + names);
+    B('boot-home-blocks', !!(q('.home-sec[data-sec="cal"]') && byId('act-new') && byId('act-settings')),
+      'calendar/new/settings present');
+    var hist = txt(q('.home-sec[data-sec="history"]'));
+    B('boot-empty-history', hist.indexOf('No finished workouts yet') !== -1, hist.slice(0, 80));
+    B('boot-js-errors', appErrors().length === 0, JSON.stringify(appErrors()));
+
+    phase(1);
+  }
+
+  async function phase2() {
+    click(byId('act-new'));
+    await until(function () { return byId('in-name'); }, 6000, 'new routine form');
+    B('new-open', !!byId('in-name'), 'name field');
+
+    setVal(byId('in-name'), 'Push');
+    var sug = await until(function () {
+      return q('#name-sug:not([hidden]) .sug[data-name="Push Day"]');
+    }, 4000, 'routine suggestion');
+    B('new-suggest', !!sug, 'Push Day suggested');
+
+    click(sug);
+    await sleep(60);
+    B('new-pick-suggest', byId('in-name').value === 'Push Day', byId('in-name').value);
+
+    click(byId('act-create'));
+    await until(function () { return q('.topbar-title'); }, 6000, 'routine view');
+    B('new-create', txt(q('.topbar-title')) === 'Push Day', txt(q('.topbar-title')));
+    B('new-start-gate', !!byId('act-start') && !byId('act-save'), 'today routine starts, not scheduled');
+
+    click(byId('act-add-ex'));
+    var card = await until(function () { return q('.ex-card[data-eid]'); }, 6000, 'exercise card');
+    B('new-add-ex', qa('.ex-card[data-eid]').length === 1, 'cards: ' + qa('.ex-card').length);
+
+    var nameIn = card.querySelector('.ex-name');
+    setVal(nameIn, 'Bench');
+    var exSug = await until(function () {
+      return q('.ex-card[data-eid] .sug[data-name="Bench Press"]');
+    }, 4000, 'exercise suggestion');
+    B('new-type-ex', !!exSug, 'Bench Press suggested');
+
+    click(exSug);
+    await sleep(80);
+    var card2 = q('.ex-card[data-eid]');
+    B('new-pick-ex', txt(card2.querySelector('.cat-tag')) === 'Chest',
+      'tag: ' + txt(card2.querySelector('.cat-tag')));
+    B('new-ex-unit', !!card2.querySelector('.set-row .in-weight') && !!card2.querySelector('.set-row .in-reps'),
+      'weight+reps inputs');
+
+    phase(2);
+  }
+
+  async function phase3() {
+    click(byId('act-start'));
+    await until(function () { return byId('act-finish'); }, 6000, 'workout started');
+    B('wo-start', !!byId('elapsed') && !!byId('act-finish'), 'timer + finish button');
+
+    var folded = qa('.ex-card.folded').length === 1;
+    B('wo-folded-by-default', folded, 'folded: ' + qa('.ex-card.folded').length);
+
+    click(q('.ex-card[data-eid] .btn-fold'));
+    await until(function () { return q('.ex-card[data-eid]:not(.folded) .set-row'); }, 6000, 'unfolded card');
+    B('wo-unfold', qa('.ex-card.folded').length === 0, 'cards folded: ' + qa('.ex-card.folded').length);
+
+    var row = q('.ex-card[data-eid] .set-row');
+    setVal(row.querySelector('.in-weight'), '100');
+    setVal(row.querySelector('.in-reps'), '5');
+    await sleep(80);
+    B('wo-log-values', row === q('.ex-card .set-row') && !!row,
+      'values typed');
+
+    var stats = qa('.ex-card[data-eid] .ex-stats b').map(txt);
+    B('wo-ex-stats', stats.length === 3 && stats[0].indexOf('500') === 0, 'stats: ' + JSON.stringify(stats));
+
+    // The rest timer only starts when another set is still pending, so add
+    // one before marking the first done.
+    click(q('.ex-card[data-eid] .btn-add-set'));
+    await until(function () { return qa('.ex-card[data-eid] .set-row').length === 2; }, 6000, 'second set');
+    B('wo-add-set', qa('.ex-card[data-eid] .set-row').length === 2, '2 rows');
+
+    var check = q('.ex-card[data-eid] .set-row .set-check');
+    click(check);
+    await until(function () { return q('.ex-card[data-eid] .set-row.done'); }, 6000, 'set done');
+    B('wo-set-done', qa('.set-row.done').length === 1, 'done rows: ' + qa('.set-row.done').length);
+
+    await until(function () { return byId('restbar'); }, 5000, 'rest bar');
+    B('wo-rest-bar', !!byId('rest-time'), 'rest bar shown');
+    click(byId('rest-skip'));
+    await until(function () { return !byId('restbar'); }, 4000, 'rest skipped');
+    B('wo-rest-skip', !byId('restbar'), 'rest bar closed');
+
+    click(qa('.ex-card[data-eid] .set-row')[1].querySelector('.btn-del-set'));
+    await until(function () { return qa('.ex-card[data-eid] .set-row').length === 1; }, 6000, 'set removed');
+    B('wo-del-set', qa('.ex-card[data-eid] .set-row').length === 1, '1 row');
+
+    click(byId('act-add-ex'));
+    var cards = await until(function () {
+      var cs = qa('.ex-card[data-eid]');
+      return cs.length === 2 ? cs : null;
+    }, 6000, 'second exercise card');
+    var cardioName = cards[1].querySelector('.ex-name');
+    setVal(cardioName, 'Runn');
+    var runSug = await until(function () { return q('.sug[data-name="Running"]'); }, 4000, 'cardio suggestion');
+    click(runSug);
+    var cardio = await until(function () { return q('.ex-card[data-cardio="1"]'); }, 6000, 'cardio layout');
+    B('wo-add-cardio', !!cardio.querySelector('.set-row.cardio .in-mins') &&
+      !!cardio.querySelector('.set-row.cardio .in-dist'), 'cardio row');
+
+    phase(3);
+  }
+
+  async function phase4() {
+    click(byId('act-finish'));
+    var sheet = await until(function () { return byId('sheet'); }, 6000, 'finish sheet');
+    B('fin-open', txt(sheet.querySelector('.sheet-title')) === 'Finish workout?',
+      txt(sheet.querySelector('.sheet-title')));
+
+    var bw = byId('fin-bw');
+    setVal(bw, '80');
+    var supps = byId('fin-supps');
+    B('fin-controls', !!(bw && supps), 'body weight + supps');
+
+    click(byId('fin-ok'));
+    await until(function () { return byId('act-share'); }, 8000, 'completed routine');
+    B('fin-complete', !byId('act-finish'), 'no finish button after completion');
+
+    await waitIdb(function (rows) {
+      return rows.some(function (r) {
+        return r.name === 'Push Day' && r.status === 'completed' && r.exercises.length === 2;
+      });
+    }, 8000, 'completed routine with both exercises');
+
+    await loadApp();
+    var item = await until(function () { return q('.item'); }, 10000, 'history entry');
+    B('per-reload', txt(item).indexOf('Push Day') !== -1, 'item: ' + txt(item).slice(0, 60));
+
+    click(item);
+    await until(function () { return q('.set-line'); }, 8000, 'completed routine view');
+    var line = qa('.set-line').map(txt).join(' | ');
+    B('per-values', line.indexOf('100') !== -1 && line.indexOf('5 reps') !== -1, line.slice(0, 90));
+
+    var bwShown = false;
+    try { bwShown = q('.topbar-title') !== null; } catch (e) {}
+    B('per-finished-view', !byId('act-start') && !byId('act-finish') && bwShown, 'read-only view');
+
+    phase(4);
+  }
+
+  async function phase5() {
+    await gotoHome();
+    var before = qa('.item').length;
+    await openSettings();
+    var vline = txt(q('.version-line'));
+    var manifest = await fetch('../manifest.webmanifest').then(function (r) { return r.json(); });
+    B('exp-version', vline === 'Kaioken v' + manifest.version, vline + ' vs manifest ' + manifest.version);
+
+    click(byId('act-gen'));
+    var raw = byId('ta-export').value;
+    var parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) {}
+    B('exp-generate', !!parsed && Array.isArray(parsed.routines) && parsed.routines.length >= 1,
+      'routines: ' + (parsed && parsed.routines ? parsed.routines.length : 'parse failed'));
+    var w = parsed && parsed.routines && parsed.routines[0] &&
+      parsed.routines[0].exercises && parsed.routines[0].exercises[0] &&
+      parsed.routines[0].exercises[0].sets && parsed.routines[0].exercises[0].sets[0];
+    B('exp-shape', !!w && w.weight === 100 && w.reps === 5, JSON.stringify(w));
+
+    setVal(byId('ta-import'), JSON.stringify(historyFixture()));
+    click(byId('act-import'));
+    await until(function () { return byId('sheet-ok'); }, 6000, 'import confirm');
+    B('imp-confirm-sheet', txt(byId('sheet')).indexOf('Import backup') !== -1,
+      txt(byId('sheet')).slice(0, 60));
+
+    click(byId('sheet-ok'));
+    await until(function () { return byId('act-new'); }, 10000, 'home after import');
+    await sleep(200);
+    var after = qa('.item').length;
+    B('imp-merged', after >= before + 4, 'items: ' + before + ' -> ' + after);
+
+    await openSettings();
+    setVal(byId('ta-import'), 'this is not json');
+    click(byId('act-import'));
+    var alert = await until(function () { return byId('sheet'); }, 6000, 'alert sheet');
+    B('imp-bad-json', txt(alert).indexOf('Import failed') !== -1, txt(alert).slice(0, 60));
+    key(D(), 'Escape');
+    await until(function () { return !byId('sheet'); }, 4000, 'alert closed');
+
+    var mid = qa('.item').length;
+    setVal(byId('ta-import'), JSON.stringify(duplicateIdFixture()));
+    click(byId('act-import'));
+    await until(function () { return byId('sheet-ok'); }, 6000, 'dup confirm');
+    click(byId('sheet-ok'));
+    await until(function () { return byId('act-new'); }, 10000, 'home after dup import');
+    await sleep(200);
+    var dup = qa('.item').length;
+    B('imp-dup-ids', dup >= mid + 2, 'items: ' + mid + ' -> ' + dup);
+
+    phase(5);
+  }
+
+  async function phase6() {
+    await gotoHome();
+    var before = qa('.item').length;
+    await openFirstHistoryItem();
+    click(byId('act-more'));
+    await until(function () { return byId('sheet'); }, 6000, 'action sheet');
+    B('sheet-open', !!byId('sheet-ren') && !!byId('sheet-dup') && !!byId('sheet-del'),
+      'rename/dup/delete');
+
+    byId('sheet-cancel').click();
+    await sleep(150);
+    B('sheet-gesture-lock', !!byId('sheet'), 'stray click without press ignored');
+
+    click(byId('sheet-cancel'));
+    await until(function () { return !byId('sheet'); }, 4000, 'sheet closed');
+    B('sheet-stray-then-tap', !byId('sheet'), 'new press closes');
+
+    click(byId('act-more'));
+    await until(function () { return byId('sheet'); }, 6000, 'sheet again');
+    key(D(), 'Escape');
+    await until(function () { return !byId('sheet'); }, 4000, 'escape closes');
+    B('sheet-escape', !byId('sheet'), 'Escape closed');
+
+    click(byId('act-more'));
+    await until(function () { return byId('sheet'); }, 6000, 'sheet for tab');
+    var last = byId('sheet-cancel');
+    last.focus();
+    key(last, 'Tab');
+    await sleep(80);
+    var active = D().activeElement;
+    B('sheet-tab-trap', !!active && q('#sheet').contains(active) && active !== last,
+      'focus: ' + (active ? (active.id || active.tagName) : 'none'));
+
+    click(byId('sheet-ren'));
+    await until(function () { return byId('sheet-input'); }, 6000, 'rename prompt');
+    setVal(byId('sheet-input'), 'Leg Day');
+    click(byId('sheet-ok'));
+    await until(function () { return txt(q('.topbar-title')) === 'Leg Day'; }, 6000, 'renamed');
+    B('sheet-rename', txt(q('.topbar-title')) === 'Leg Day', txt(q('.topbar-title')));
+
+    click(byId('act-more'));
+    await until(function () { return byId('sheet'); }, 6000, 'sheet for dup');
+    click(byId('sheet-dup'));
+    await until(function () { return !byId('act-finish') && byId('act-start'); }, 8000, 'duplicate routine');
+    B('sheet-dup', txt(q('.topbar-title')) === 'Leg Day' && qa('.ex-card[data-eid]').length === 2,
+      'title=' + txt(q('.topbar-title')) + ' cards=' + qa('.ex-card[data-eid]').length);
+
+    click(byId('act-del'));
+    await until(function () { return byId('sheet-ok'); }, 6000, 'delete confirm');
+    click(byId('sheet-ok'));
+    await until(function () { return byId('act-new'); }, 8000, 'home after delete');
+    await sleep(150);
+    B('sheet-del', qa('.item').length === before, 'items: ' + before + ' -> ' + qa('.item').length + ' at ' + txt(q('.topbar-title')));
+
+    phase(6);
+  }
+
+  function tickTexts() {
+    return qa('.linesvg .ytick').map(txt);
+  }
+
+  function num(s) {
+    var m = String(s).replace(/[^0-9.\-]/g, '');
+    return m ? parseFloat(m) : NaN;
+  }
+
+  function uniformTicks(list) {
+    var vals = list.map(num).filter(function (v) { return isFinite(v); });
+    if (vals.length < 3) return false;
+    var d = vals[1] - vals[0];
+    if (!(d > 0)) return false;
+    for (var i = 2; i < vals.length; i++) {
+      if (Math.abs((vals[i] - vals[i - 1]) - d) > 0.011) return false;
+    }
+    return true;
+  }
+
+  async function phase7() {
+    await openStats();
+    await tab('progression');
+    var svg = await until(function () { return q('.linesvg'); }, 8000, 'progression chart');
+    B('stats-tabs', qa('.seg-tabs button').length === 3, 'tabs: ' + qa('.seg-tabs button').length);
+
+    var sel = byId('sel-ex');
+    B('stats-ex-select', !!sel && sel.options.length >= 3, 'exercises: ' + (sel ? sel.options.length : 0));
+    var bench = qa('#sel-ex option').filter(function (o) { return o.value === 'Bench Press'; })[0];
+    setChange(sel, 'Bench Press');
+    await until(function () { return qa('.linesvg .pt').length >= 2; }, 8000, 'bench progression');
+    B('stats-progression-svg', qa('.linesvg .pt').length >= 3, 'points: ' + qa('.linesvg .pt').length);
+
+    click(byId('btn-ex-opts'));
+    await optItem('type:bar');
+    var bars = await until(function () { return qa('.pbar').length ? qa('.pbar') : null; }, 6000, 'bars');
+    B('stats-bar-mode', bars.length >= 2, 'bars: ' + bars.length);
+
+    await tab('volume');
+    // The volume tab remembers its type across renders; force bars first.
+    click(byId('btn-vol-opts'));
+    await optItem('type:bar');
+    var ycol = await until(function () { return q('.ycol .yaxis'); }, 8000, 'volume gutter');
+    B('stats-volume-bars', !!ycol && qa('.col').length >= 2 && qa('.segm').length > 0,
+      'cols: ' + qa('.col').length + ' segs: ' + qa('.segm').length);
+
+    click(byId('btn-vol-opts'));
+    await optItem('type:line');
+    B('stats-volume-line', !!q('.chart-card .linesvg') && qa('.ycol').length === 0,
+      'line mode has no gutter');
+
+    await tab('heatmap');
+    // The muscles tab remembers its view; force the heat grid first.
+    click(byId('btn-mus-opts'));
+    await optItem('view:heat');
+    var cells = await until(function () { return qa('.hcell[data-op]').length ? qa('.hcell[data-op]') : null; },
+      8000, 'heat cells');
+    B('stats-heatmap', cells.length >= 4 && qa('.hrow').length >= 3,
+      'cells: ' + cells.length + ' rows: ' + qa('.hrow').length);
+
+    click(byId('btn-mus-opts'));
+    await optItem('view:radar');
+    var radar = await until(function () { return q('.radarsvg'); }, 6000, 'radar');
+    B('stats-radar', !!radar && qa('.rring').length === 4 && txt(q('.radar-scale')).indexOf('scale 0') !== -1,
+      'rings: ' + qa('.rring').length);
+
+    phase(7);
+  }
+
+  async function phase8() {
+    var csp = q('meta[http-equiv="Content-Security-Policy"]');
+    var content = csp ? csp.getAttribute('content') : '';
+    B('csp-meta', content.indexOf("default-src 'self'") !== -1 &&
+      content.indexOf("style-src 'self'") !== -1 &&
+      content.indexOf("object-src 'none'") !== -1 &&
+      content.indexOf('unsafe-inline') === -1, content);
+    B('csp-no-violations', cspViolations().length === 0, JSON.stringify(cspViolations()).slice(0, 200));
+
+    await tab('volume');
+    click(byId('btn-vol-opts'));
+    await optItem('type:bar');
+    await until(function () { return q('.segm[data-h]'); }, 8000, 'segments');
+    var seg = q('.segm[data-h]');
+    B('csp-segm-painted', /%$/.test(seg.style.height) && !!seg.style.background,
+      'height=' + seg.style.height + ' bg=' + seg.style.background);
+    var dot = q('.bd-dot[data-cat]');
+    B('csp-dot-painted', !!dot && !!dot.style.background, dot ? dot.style.background : 'missing');
+
+    await tab('heatmap');
+    click(byId('btn-mus-opts'));
+    await optItem('view:heat');
+    var cell = await until(function () { return q('.hcell[data-op]'); }, 8000, 'heat cell');
+    B('csp-hcell-painted', !!cell.style.background && cell.style.opacity === cell.dataset.op,
+      'bg=' + cell.style.background + ' op=' + cell.style.opacity + '/' + cell.dataset.op);
+    var cellsBox = q('.hcells[data-cols]');
+    var tracks = getComputedStyle(cellsBox).gridTemplateColumns.split(' ').filter(Boolean);
+    B('csp-hcells-tracks', tracks.length === Number(cellsBox.dataset.cols),
+      'tracks: ' + tracks.length + ' cols: ' + cellsBox.dataset.cols);
+
+    await openSettings();
+    var sw = q('.sw[data-swatch="accent"]');
+    B('csp-swatch-painted', !!sw && !!sw.style.background, sw ? sw.style.background : 'missing');
+
+    phase(8);
+  }
+
+  async function phase9() {
+    await openStats();
+    await tab('progression');
+
+    var ticks = await until(function () { return tickTexts().length >= 3 ? tickTexts() : null; }, 8000, 'y ticks');
+    B('chart-ticks', uniformTicks(ticks), 'ticks: ' + JSON.stringify(ticks));
+    B('chart-unit-on-top', / kg$/.test(ticks[ticks.length - 1]), ticks[ticks.length - 1]);
+    B('chart-grid-lines', qa('.linesvg .ygrid').length === ticks.length,
+      'grid: ' + qa('.linesvg .ygrid').length + ' ticks: ' + ticks.length);
+    var axis = q('.linesvg .yaxis-line');
+    B('chart-axis-line', !!axis && Number(axis.getAttribute('y2')) - Number(axis.getAttribute('y1')) > 50,
+      axis ? axis.getAttribute('y1') + '..' + axis.getAttribute('y2') : 'missing');
+
+    var topBefore = num(ticks[ticks.length - 1]);
+    var sel = byId('sel-ex');
+    var other = qa('#sel-ex option').filter(function (o) { return o.value === 'Squat'; })[0];
+    B('chart-ex-option', !!other, 'Squat present: ' + qa('#sel-ex option').map(function (o) { return o.value; }).join(','));
+    setChange(sel, 'Squat');
+    await until(function () {
+      var t = tickTexts();
+      return t.length && Math.abs(num(t[t.length - 1]) - topBefore) > 1;
+    }, 8000, 'chart rescale');
+    B('chart-rescale', Math.abs(num(tickTexts().slice(-1)[0]) - topBefore) > 1,
+      'top tick ' + topBefore + ' -> ' + tickTexts().slice(-1)[0]);
+    B('chart-points-inside', qa('.pt').every(function (p) {
+      var cx = Number(p.getAttribute('cx')), cy = Number(p.getAttribute('cy'));
+      var vb = q('.linesvg').getAttribute('viewBox').split(' ').map(Number);
+      return cx >= vb[2] * 0.1 && cx <= vb[2] && cy >= 0 && cy <= vb[3];
+    }), 'all points inside viewBox');
+
+    await tab('volume');
+    click(byId('btn-vol-opts'));
+    await optItem('type:bar');
+    var yLabels = await until(function () {
+      var s = qa('.ycol .yaxis span');
+      return s.length === 3 ? s.map(txt) : null;
+    }, 8000, 'gutter labels');
+    B('chart-vol-labels', yLabels[2] === '0' && num(yLabels[0]) > 0, JSON.stringify(yLabels));
+
+    var axisBox = q('.ycol .yaxis').getBoundingClientRect();
+    var col = qa('.col').filter(function (c) { return c.querySelector('.segm'); })[0];
+    var segsBox = col.querySelector('.segs').getBoundingClientRect();
+    B('chart-vol-align', Math.abs(axisBox.top - segsBox.top) <= 6 && Math.abs(axisBox.height - segsBox.height) <= 2,
+      'axis ' + axisBox.top.toFixed(1) + '+' + axisBox.height.toFixed(1) +
+      ' segs ' + segsBox.top.toFixed(1) + '+' + segsBox.height.toFixed(1));
+
+    var sums = qa('.col').map(function (c) {
+      return qa('.segm', c).reduce(function (n, s) { return n + Number(s.dataset.h); }, 0);
+    }).filter(function (n) { return n > 0; });
+    B('chart-vol-scale', sums.length > 0 && Math.max.apply(null, sums) <= 100.5, 'max stack: ' + Math.max.apply(null, sums));
+
+    var colsBefore = qa('.col').length;
+    click(byId('btn-vol-opts'));
+    await optItem('range:all');
+    var colsAfter = await until(function () { return qa('.col').length; }, 8000, 'columns after range change');
+    B('chart-range-change', colsAfter > 0, 'cols ' + colsBefore + ' -> ' + colsAfter);
+
+    var bdRows = qa('.bd-row').length;
+    B('chart-breakdown', bdRows >= 2 && qa('.bd-dot').length === bdRows, 'breakdown rows: ' + bdRows);
+
+    phase(9);
+  }
+
+  async function phase10() {
+    await openFirstHistoryItem();
+    B('share-button', !!byId('act-share'), 'share button on completed routine');
+
+    click(byId('act-share'));
+    var img = await until(function () {
+      var i = q('.share-preview img');
+      return i && i.complete && i.naturalWidth ? i : null;
+    }, 15000, 'share preview');
+    B('share-sheet', txt(q('.sheet-title')) === 'Share highlight', txt(q('.sheet-title')));
+    B('share-size', img.naturalWidth === 1080 && img.naturalHeight === 1350,
+      img.naturalWidth + 'x' + img.naturalHeight);
+    B('share-payload', img.src.length > 20000, 'data url chars: ' + img.src.length);
+
+    var cv = document.createElement('canvas');
+    cv.width = img.naturalWidth;
+    cv.height = img.naturalHeight;
+    var ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    var colors = {};
+    var opaque = true;
+    for (var y = 10; y < cv.height; y += 40) {
+      for (var x = 10; x < cv.width; x += 40) {
+        var px = ctx.getImageData(x, y, 1, 1).data;
+        if (px[3] !== 255) opaque = false;
+        colors[px[0] + ',' + px[1] + ',' + px[2]] = 1;
+      }
+    }
+    B('share-pixels', opaque && Object.keys(colors).length >= 5,
+      'colors: ' + Object.keys(colors).length + ' opaque: ' + opaque);
+
+    var previewBox = q('.share-preview').getBoundingClientRect();
+    B('soft-share-preview', previewBox.width <= 400 && previewBox.height > 100,
+      'preview ' + previewBox.width.toFixed(0) + 'x' + previewBox.height.toFixed(0));
+
+    click(byId('share-copy'));
+    await sleep(250);
+    B('share-copy', !!byId('toast') && txt(byId('toast')).length > 0,
+      'toast: ' + txt(byId('toast')));
+
+    key(D(), 'Escape');
+    await until(function () { return !byId('sheet'); }, 4000, 'share sheet closed');
+    B('share-escape', !byId('sheet'), 'Escape closed');
+
+    click(byId('act-back'));
+    await until(function () { return byId('act-new'); }, 8000, 'home');
+    click(byId('act-new'));
+    await until(function () { return byId('in-name'); }, 6000, 'new routine');
+    setVal(byId('in-name'), 'Gate Test');
+    click(byId('act-create'));
+    await until(function () { return byId('act-start'); }, 8000, 'scheduled routine');
+    B('share-gate-scheduled', !byId('act-share'), 'no share button on a scheduled routine');
+
+    phase(10);
+  }
+
+  async function phase11() {
+    var visible = D().documentElement.style.visibility !== 'hidden';
+    B('frame-sameorigin', visible, 'app visible in same-origin frame');
+    B('no-js-errors-final', appErrors().length === 0, JSON.stringify(appErrors()).slice(0, 300));
+    var overflow = D().documentElement.scrollWidth - D().documentElement.clientWidth;
+    B('soft-view-layout', overflow <= 1, 'horizontal overflow: ' + overflow + 'px');
+    phase(11);
+  }
+
+  var phases = [phase1, phase2, phase3, phase4, phase5, phase6, phase7, phase8, phase9, phase10, phase11];
+
+  (async function run() {
+    try {
+      await loadApp();
+    } catch (e) {
+      B('boot-crash', false, e.message);
+    }
+    for (var i = 0; i < phases.length; i++) {
+      try {
+        await phases[i]();
+      } catch (e) {
+        B('phase' + (i + 1) + '-crash', false, e.message);
+      }
+    }
+    var done = 'DONE-' + (fails === 0 ? 'ALLPASS' : 'FAILURES-' + fails) + '-' + checks;
+    fetch('beacon/' + done).catch(function () {});
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,2 +1,6 @@
 /gymlog
 /gymlog.exe
+/node_modules/
+/_site/
+
+/test-results/
