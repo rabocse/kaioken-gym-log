@@ -264,8 +264,9 @@
 
   /* ---------- state ---------- */
   let routines = [];
+  let programs = []; // (#62) stored whole-array in the settings store
   let storagePersisted = null;
-  let view = { name: 'home' }; // home | new | routine | settings | stats
+  let view = { name: 'home' }; // home | new | routine | program | settings | stats
   let timerInt = null;
   const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', homeChart: null, homeOrder: null, goals: null };
 
@@ -585,6 +586,7 @@
     switch (view.name) {
       case 'new': renderNew(); break;
       case 'routine': renderRoutine(); break;
+      case 'program': renderProgram(); break;
       case 'settings': renderSettings(); break;
       case 'stats': renderStats(); break;
       default: renderHome(); break;
@@ -750,6 +752,7 @@
         : '') +
       '<button class="btn btn-block" id="sheet-ren" type="button">' + I.edit + '<span>Rename</span></button>' +
       '<button class="btn btn-block" id="sheet-dup" type="button">' + I.copy + '<span>Repeat as New</span></button>' +
+      '<button class="btn btn-block btn-ghost" id="sheet-addprog" type="button">' + I.copy + '<span>Add to Program</span></button>' +
       '<button class="btn btn-block sheet-danger" id="sheet-del" type="button">' + I.trash + '<span>Delete</span></button>' +
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
     mountSheet(backdrop, sheet);
@@ -757,6 +760,9 @@
     document.getElementById('sheet-cancel').onclick = guard(closeSheet);
     const shareBtn = document.getElementById('sheet-share');
     if (shareBtn) shareBtn.onclick = guard(() => { shareHighlight(r); });
+    document.getElementById('sheet-addprog').onclick = guard(() => {
+      openProgramPicker(r);
+    });
     document.getElementById('sheet-ren').onclick = guard(() => {
       openPromptSheet({
         title: 'Rename routine',
@@ -991,7 +997,7 @@
   // Touch-and-hold (500ms) or right-click opens the action sheet. Small
   // finger drift while holding is tolerated; a real move cancels. The click
   // that follows a long-press is suppressed so it does not navigate.
-  function attachLongPress(el, r) {
+  function attachLongPress(el, onSheet) {
     let timer = null;
     let fired = false;
     let sx = 0;
@@ -1009,7 +1015,7 @@
       timer = setTimeout(() => {
         fired = true;
         el._suppressClick = true;
-        openSheet(r);
+        onSheet();
       }, 500);
     }, { passive: true });
     el.addEventListener('touchmove', (e) => {
@@ -1029,12 +1035,346 @@
       fired = true;
       clear();
       el._suppressClick = true;
-      openSheet(r);
+      onSheet();
     });
     const base = el.onclick;
     el.onclick = (e) => {
       if (el._suppressClick) { el._suppressClick = false; return; }
       if (base) base(e);
+    };
+  }
+
+  /* ---------- programs (#62) ---------- */
+  // A program is a named bundle of routine templates: routine-shaped
+  // entries (name + exercises with sets) minus the scheduling fields.
+  // They live as one array value in the settings store - the database
+  // schema stays at version 2, so a deployed 1.11.0 can be rolled back
+  // with a plain git revert with zero data hazard.
+  function getProgram(id) {
+    return programs.find((p) => p.id === id) || null;
+  }
+
+  function savePrograms() {
+    store.setSetting('programs', programs)
+      .catch((e) => console.error('Kaioken: program save failed', e));
+  }
+
+  // Deep-copy exercises with fresh ids, nothing marked done: the shared
+  // shape behind "start a template today" and "copy a routine into a
+  // program".
+  function copyExercises(exs) {
+    return (exs || []).map((ex) => ({
+      id: uid(),
+      name: ex.name,
+      unit: ex.unit === 'lb' ? 'lb' : 'kg',
+      dunit: ex.dunit === 'mi' ? 'mi' : 'km',
+      sets: (ex.sets || []).map((st) => ({
+        id: uid(),
+        reps: toNum(st.reps),
+        weight: toNum(st.weight),
+        mins: toNum(st.mins),
+        dist: toNum(st.dist),
+        done: false,
+        warmup: st.warmup === true,
+      })),
+    }));
+  }
+
+  function upsertTemplate(p, tpl) {
+    const existing = p.routines.find((x) => x.name === tpl.name);
+    if (existing) existing.exercises = tpl.exercises;
+    else p.routines.push(tpl);
+  }
+
+  // Materialize a template as today's scheduled routine. The routine is
+  // tagged with the program id so the home card can show "2/4 this week";
+  // Repeat-as-New copies stay untagged (they are manual copies).
+  function routineFromTemplate(p, t) {
+    const r = {
+      id: uid(),
+      programId: p.id,
+      name: t.name,
+      date: todayISO(),
+      createdAt: Date.now(),
+      startedAt: null,
+      endedAt: null,
+      status: 'scheduled',
+      exercises: copyExercises(t.exercises),
+    };
+    routines.push(r);
+    scheduleSave(r, true);
+    return r;
+  }
+
+  function programWeekDone(p) {
+    const w = goalWindow('week');
+    return completedInRange(w[0], w[1]).filter((r) => r.programId === p.id).length;
+  }
+
+  // Generic pick-list sheet (mirrors the other sheet builders: same
+  // backdrop, gesture lock and keyboard trap).
+  function openListSheet(opts) {
+    closeSheet();
+    sheetGestureLock = true;
+    const guard = (fn) => () => {
+      if (sheetGestureLock) return;
+      fn();
+    };
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sheet-backdrop';
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.innerHTML =
+      '<div class="sheet-title">' + esc(opts.title) + '</div>' +
+      (opts.items.length
+        ? opts.items.map((it) =>
+          '<button class="btn btn-block' + (it.danger ? ' sheet-danger' : '') + '" type="button" data-pick="' + esc(it.id) + '">' +
+          '<span>' + esc(it.label) +
+          (it.sub ? ' <span class="muted-small">' + esc(it.sub) + '</span>' : '') +
+          '</span></button>').join('')
+        : '<div class="empty-inline">' + esc(opts.empty || 'Nothing to pick yet.') + '</div>') +
+      '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
+    mountSheet(backdrop, sheet);
+    backdrop.onclick = guard(closeSheet);
+    document.getElementById('sheet-cancel').onclick = guard(closeSheet);
+    sheet.querySelectorAll('[data-pick]').forEach((b) => {
+      b.onclick = guard(() => {
+        const it = opts.items.find((x) => x.id === b.dataset.pick);
+        closeSheet();
+        if (it) opts.onPick(it);
+      });
+    });
+  }
+
+  function openProgramSheet(p) {
+    openListSheet({
+      title: p.name,
+      items: [
+        { id: 'ren', label: 'Rename' },
+        { id: 'dup', label: 'Duplicate' },
+        { id: 'del', label: 'Delete', danger: true },
+      ],
+      onPick: (it) => {
+        if (it.id === 'ren') {
+          openPromptSheet({
+            title: 'Rename program',
+            label: 'Name',
+            value: p.name,
+            onOk: (v) => {
+              const nm = String(v || '').trim().slice(0, 60);
+              if (!nm) return;
+              p.name = nm;
+              savePrograms();
+              render();
+            },
+          });
+        } else if (it.id === 'dup') {
+          programs.push({
+            id: uid(),
+            name: (p.name + ' copy').slice(0, 60),
+            createdAt: Date.now(),
+            routines: p.routines.map((t) => ({
+              id: uid(),
+              name: t.name,
+              exercises: copyExercises(t.exercises),
+            })),
+          });
+          savePrograms();
+          render();
+        } else if (it.id === 'del') {
+          confirmDeleteProgram(p);
+        }
+      },
+    });
+  }
+
+  function confirmDeleteProgram(p) {
+    openConfirmSheet({
+      title: 'Delete program',
+      message: 'Delete "' + p.name + '"? Workouts already logged from it are kept.',
+      confirmLabel: 'Delete',
+      onConfirm: () => {
+        programs = programs.filter((x) => x.id !== p.id);
+        savePrograms();
+        if (view.name === 'program' && view.id === p.id) go('home');
+        else render();
+      },
+    });
+  }
+
+  function openTemplateSheet(p, t) {
+    const items = [
+      { id: 'up', label: 'Move up' },
+      { id: 'down', label: 'Move down' },
+      { id: 'ren', label: 'Rename' },
+      { id: 'del', label: 'Remove from program', danger: true },
+    ];
+    openListSheet({
+      title: t.name,
+      items: items,
+      onPick: (it) => {
+        const idx = p.routines.indexOf(t);
+        if (it.id === 'up' && idx > 0) {
+          p.routines.splice(idx, 1);
+          p.routines.splice(idx - 1, 0, t);
+          savePrograms();
+          render();
+        } else if (it.id === 'down' && idx >= 0 && idx < p.routines.length - 1) {
+          p.routines.splice(idx, 1);
+          p.routines.splice(idx + 1, 0, t);
+          savePrograms();
+          render();
+        } else if (it.id === 'ren') {
+          openPromptSheet({
+            title: 'Rename routine',
+            label: 'Name',
+            value: t.name,
+            onOk: (v) => {
+              const nm = String(v || '').trim().slice(0, 60);
+              if (!nm) return;
+              t.name = nm;
+              savePrograms();
+              render();
+            },
+          });
+        } else if (it.id === 'del') {
+          p.routines = p.routines.filter((x) => x.id !== t.id);
+          savePrograms();
+          render();
+        }
+      },
+    });
+  }
+
+  function openProgramPicker(r) {
+    const items = programs.map((p) => ({
+      id: p.id,
+      label: p.name,
+      sub: p.routines.length + (p.routines.length === 1 ? ' routine' : ' routines'),
+    }));
+    items.push({ id: '__new', label: 'New program\u2026' });
+    openListSheet({
+      title: 'Add "' + (r.name || 'routine') + '" to',
+      items: items,
+      onPick: (it) => {
+        const addTo = (p) => {
+          upsertTemplate(p, { id: uid(), name: r.name, exercises: copyExercises(r.exercises) });
+          savePrograms();
+          render();
+          toast('"' + r.name + '" added to ' + p.name);
+        };
+        if (it.id === '__new') {
+          openPromptSheet({
+            title: 'New program',
+            label: 'Name',
+            okLabel: 'Create',
+            onOk: (v) => {
+              const nm = String(v || '').trim().slice(0, 60);
+              if (!nm) return;
+              const p = { id: uid(), name: nm, createdAt: Date.now(), routines: [] };
+              programs.push(p);
+              addTo(p);
+            },
+          });
+        } else {
+          const p = getProgram(it.id);
+          if (p) addTo(p);
+        }
+      },
+    });
+  }
+
+  function programsHTML() {
+    if (!programs.length) return '';
+    const items = programs.map((p) => {
+      const done = programWeekDone(p);
+      const next = p.routines.length
+        ? p.routines[Math.min(done, p.routines.length - 1)]
+        : null;
+      const meta = p.routines.length + (p.routines.length === 1 ? ' routine' : ' routines') +
+        (next ? ' \u00b7 next: ' + esc(next.name) : '');
+      return '<button class="item" data-prog="' + esc(p.id) + '">' +
+        '<span class="item-main">' +
+        '<span class="item-name">' + esc(p.name) + '</span>' +
+        '<span class="item-meta">' + meta + '</span>' +
+        '</span>' +
+        '<span class="item-right"><span class="chip chip-prog">' + done + '/' + p.routines.length + ' this week</span></span>' +
+        '</button>';
+    });
+    return sectionHTML('Programs', items, '');
+  }
+
+  function renderProgram() {
+    const p = getProgram(view.id);
+    if (!p) { view = { name: 'home' }; return renderHome(); }
+    const done = programWeekDone(p);
+    const next = p.routines.length
+      ? p.routines[Math.min(done, p.routines.length - 1)]
+      : null;
+    const tplItems = p.routines.map((t) => {
+      const exN = (t.exercises || []).length;
+      return '<button class="item prog-tpl" data-tid="' + esc(t.id) + '">' +
+        '<span class="item-main">' +
+        '<span class="item-name">' + esc(t.name) + '</span>' +
+        '<span class="item-meta">' + exN + (exN === 1 ? ' exercise' : ' exercises') + '</span>' +
+        '</span>' +
+        '<span class="item-right">' + I.chev + '</span>' +
+        '</button>';
+    }).join('');
+    $app.innerHTML =
+      '<header class="topbar">' +
+      '<button class="btn btn-icon" id="act-back" aria-label="Back">' + I.back + '</button>' +
+      '<h1 class="topbar-title">' + esc(p.name) + '</h1>' +
+      '<button class="btn btn-icon" id="act-more" aria-label="More actions">' + I.dots + '</button>' +
+      '<button class="btn btn-icon btn-danger" id="act-del" aria-label="Delete program">' + I.trash + '</button>' +
+      '</header>' +
+      '<div class="card note">' +
+      (p.routines.length
+        ? 'Tap a routine to schedule it for today. This week: <b>' +
+          Math.min(done, p.routines.length) + '/' + p.routines.length + '</b>' +
+          (next ? '. Next up: <b>' + esc(next.name) + '</b>' : '') + '.'
+        : 'No routines in this program yet. Copy one in from an existing routine below.') +
+      '</div>' +
+      '<div class="section-label">Routines</div>' +
+      (tplItems || '<div class="empty">Nothing here yet.</div>') +
+      '<button class="btn btn-ghost btn-block" id="act-copy-routine" type="button">' + I.copy + '<span>Copy from Routine</span></button>' +
+      '<p class="hint">Long-press a routine to move it up or down, rename it or remove it. Starting one creates today’s scheduled workout - the timer starts when you tap Start Workout, like any routine.</p>' +
+      '<div class="spacer"></div>';
+
+    document.getElementById('act-back').onclick = () => go('home');
+    document.getElementById('act-more').onclick = () => openProgramSheet(p);
+    document.getElementById('act-del').onclick = () => confirmDeleteProgram(p);
+    $app.querySelectorAll('.prog-tpl').forEach((el) => {
+      const t = p.routines.find((x) => x.id === el.dataset.tid);
+      if (!t) return;
+      el.onclick = () => {
+        const r = routineFromTemplate(p, t);
+        toast('"' + t.name + '" scheduled for today');
+        go('routine', { id: r.id });
+      };
+      attachLongPress(el, () => openTemplateSheet(p, t));
+    });
+    document.getElementById('act-copy-routine').onclick = () => {
+      openListSheet({
+        title: 'Copy from routine',
+        empty: 'No routines yet - create one first.',
+        items: routines.slice()
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+          .map((r) => ({
+            id: r.id,
+            label: r.name,
+            sub: fmtDate(r.date),
+          })),
+        onPick: (it) => {
+          const src = getRoutine(it.id);
+          if (!src) return;
+          upsertTemplate(p, { id: uid(), name: src.name, exercises: copyExercises(src.exercises) });
+          savePrograms();
+          render();
+          toast('"' + src.name + '" added to ' + p.name);
+        },
+      });
     };
   }
 
@@ -1333,7 +1673,9 @@
       cal: calHTML,
       goals: goalsHTML(),
       chart: settings.homeChart ? homeChartHTML() : '',
-      new: '<button class="btn btn-primary btn-block btn-new" id="act-new">' + I.plus + '<span>New Routine</span></button>',
+      new: '<button class="btn btn-primary btn-block btn-new" id="act-new">' + I.plus + '<span>New Routine</span></button>' +
+        '<button class="btn btn-ghost btn-block btn-new-prog" id="act-new-program" type="button">' + I.plus + '<span>New Program</span></button>',
+      programs: programsHTML(),
       active: sectionHTML('Active', active.map((r) => itemHTML(r, today)), ''),
       scheduled: sectionHTML('Scheduled', scheduled.map((r) => itemHTML(r, today)), ''),
       history: historyHTML,
@@ -1388,15 +1730,39 @@
         render();
       };
     });
-    $app.querySelectorAll('.item').forEach((el) => {
+    $app.querySelectorAll('.item[data-id]').forEach((el) => {
       el.onclick = () => go('routine', { id: el.dataset.id });
     });
     // The long-press sheet (Rename / Repeat as New / Delete) is available
     // on every routine entry - history, active and scheduled alike.
-    $app.querySelectorAll('.item').forEach((el) => {
+    $app.querySelectorAll('.item[data-id]').forEach((el) => {
       const r = getRoutine(el.dataset.id);
-      if (r) attachLongPress(el, r);
+      if (r) attachLongPress(el, () => openSheet(r));
     });
+    // Program cards: tap to open, long-press for Rename / Duplicate /
+    // Delete (#62).
+    $app.querySelectorAll('.item[data-prog]').forEach((el) => {
+      const p = getProgram(el.dataset.prog);
+      if (!p) return;
+      el.onclick = () => go('program', { id: p.id });
+      attachLongPress(el, () => openProgramSheet(p));
+    });
+    const newProgBtn = document.getElementById('act-new-program');
+    if (newProgBtn) newProgBtn.onclick = () => {
+      openPromptSheet({
+        title: 'New program',
+        label: 'Name',
+        okLabel: 'Create',
+        onOk: (v) => {
+          const nm = String(v || '').trim().slice(0, 60);
+          if (!nm) return;
+          const p = { id: uid(), name: nm, createdAt: Date.now(), routines: [] };
+          programs.push(p);
+          savePrograms();
+          go('program', { id: p.id });
+        },
+      });
+    };
     if (settings.homeChart) bindHomeChart();
     $app.querySelectorAll('.home-sec').forEach((sec) => {
       attachHoldDrag(sec, {
@@ -3623,7 +3989,7 @@
   // sections that appeared later (or were never saved) keep their default
   // spot at the end.
   function homeOrderOrDefault() {
-    const all = ['cal', 'goals', 'chart', 'new', 'active', 'scheduled', 'history'];
+    const all = ['cal', 'goals', 'chart', 'new', 'programs', 'active', 'scheduled', 'history'];
     const saved = Array.isArray(settings.homeOrder) ? settings.homeOrder : [];
     const out = saved.filter((id) => all.indexOf(id) !== -1);
     all.forEach((id) => { if (out.indexOf(id) === -1) out.push(id); });
@@ -3824,6 +4190,52 @@
     return Object.keys(out).length ? out : null;
   }
 
+  // The exercise/set validation shared by routines and program
+  // templates (#62), extracted verbatim from sanitizeRoutine.
+  function sanitizeExercises(arr) {
+    const exercises = Array.isArray(arr) ? arr : [];
+    exercises.forEach((e) => {
+      e.id = (typeof e.id === 'string' && e.id) ? e.id : uid();
+      e.name = typeof e.name === 'string' ? e.name.slice(0, 60) : '';
+      e.unit = e.unit === 'lb' ? 'lb' : 'kg';
+      e.dunit = e.dunit === 'mi' ? 'mi' : 'km';
+      e.sets = Array.isArray(e.sets) ? e.sets : [];
+      e.sets.forEach((st) => {
+        st.id = (typeof st.id === 'string' && st.id) ? st.id : uid();
+        st.reps = toNum(st.reps);
+        st.weight = toNum(st.weight);
+        st.mins = toNum(st.mins);
+        st.dist = toNum(st.dist);
+        st.done = st.done === true;
+        st.warmup = st.warmup === true;
+      });
+    });
+    return exercises;
+  }
+
+  function sanitizeProgram(p) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const out = {
+      id: (typeof p.id === 'string' && p.id) ? p.id : uid(),
+      name: (typeof p.name === 'string' && p.name.trim())
+        ? p.name.trim().slice(0, 60) : 'Program',
+      createdAt: toNum(p.createdAt) || Date.now(),
+      routines: [],
+    };
+    if (Array.isArray(p.routines)) {
+      p.routines.slice(0, 24).forEach((t) => {
+        if (!t || typeof t !== 'object' || Array.isArray(t)) return;
+        out.routines.push({
+          id: (typeof t.id === 'string' && t.id) ? t.id : uid(),
+          name: (typeof t.name === 'string' && t.name.trim())
+            ? t.name.trim().slice(0, 60) : 'Routine',
+          exercises: sanitizeExercises(t.exercises),
+        });
+      });
+    }
+    return out;
+  }
+
   function sanitizeRoutine(r) {
     // The routine's own id is validated exactly like the nested exercise
     // and set ids: IndexedDB accepts numbers and (for puts) rejects
@@ -3861,23 +4273,11 @@
     r.supps = r.supps === true ? true : r.supps === false ? false : null;
     r.bodyWeight = toNum(r.bodyWeight);
     r.bwUnit = r.bwUnit === 'lb' ? 'lb' : 'kg';
-    r.exercises = Array.isArray(r.exercises) ? r.exercises : [];
-    r.exercises.forEach((e) => {
-      e.id = (typeof e.id === 'string' && e.id) ? e.id : uid();
-      e.name = typeof e.name === 'string' ? e.name.slice(0, 60) : '';
-      e.unit = e.unit === 'lb' ? 'lb' : 'kg';
-      e.dunit = e.dunit === 'mi' ? 'mi' : 'km';
-      e.sets = Array.isArray(e.sets) ? e.sets : [];
-      e.sets.forEach((s) => {
-        s.id = (typeof s.id === 'string' && s.id) ? s.id : uid();
-        s.reps = toNum(s.reps);
-        s.weight = toNum(s.weight);
-        s.mins = toNum(s.mins);
-        s.dist = toNum(s.dist);
-        s.done = s.done === true;
-        s.warmup = s.warmup === true;
-      });
-    });
+    // Routines started from a program carry its id (#62): validated as an
+    // opaque string so imports cannot smuggle objects into the record.
+    r.programId = (typeof r.programId === 'string' && r.programId)
+      ? r.programId.slice(0, 64) : null;
+    r.exercises = sanitizeExercises(r.exercises);
     return r;
   }
 
@@ -4003,6 +4403,7 @@
         version: 1,
         exportedAt: new Date().toISOString(),
         routines: routines,
+        programs: programs,
         settings: {
           rest: settings.rest,
           theme: settings.theme,
@@ -4229,8 +4630,11 @@
       const list = (incoming || [])
         .filter((x) => x && typeof x === 'object' && !Array.isArray(x))
         .map(sanitizeRoutine);
-      if (!list.length && !(data && data.settings)) {
-        openAlertSheet({ title: 'Import failed', message: 'No routines found in the backup.' });
+      const incomingPrograms = (data && Array.isArray(data.programs))
+        ? data.programs.map(sanitizeProgram).filter(Boolean)
+        : [];
+      if (!list.length && !incomingPrograms.length && !(data && data.settings)) {
+        openAlertSheet({ title: 'Import failed', message: 'No routines or programs found in the backup.' });
         return;
       }
       const apply = async () => {
@@ -4281,11 +4685,47 @@
           });
           return;
         }
+        let pAdded = 0;
+        let pUpdated = 0;
+        if (incomingPrograms.length) {
+          // Same write-then-merge discipline as the routines (#33): build
+          // the merged array, write it, and only then touch the session -
+          // a failed write must not leave programs that vanish on reload.
+          const seenP = new Set();
+          incomingPrograms.forEach((ip) => {
+            if (seenP.has(ip.id)) ip.id = uid();
+            seenP.add(ip.id);
+          });
+          const merged = programs.slice();
+          incomingPrograms.forEach((ip) => {
+            const idx = merged.findIndex((x) => x.id === ip.id);
+            if (idx >= 0) { merged[idx] = ip; pUpdated++; }
+            else { merged.push(ip); pAdded++; }
+          });
+          try {
+            await store.setSetting('programs', merged);
+            programs = merged;
+          } catch (err) {
+            console.error('Kaioken: program import write failed', err);
+            openAlertSheet({
+              title: 'Import incomplete',
+              message: 'The routines were saved but the programs were not. Reload the app, then try again.',
+            });
+            go('home');
+            return;
+          }
+        }
         if (data && data.settings) applySettings(data.settings);
-        toast('Imported ' + added + ' new, updated ' + updated);
+        toast('Imported ' + added + ' new, updated ' + updated +
+          (incomingPrograms.length
+            ? ', ' + pAdded + ' program' + (pAdded === 1 ? '' : 's') + ' added, ' + pUpdated + ' updated'
+            : ''));
         go('home');
       };
-      if (!list.length) {
+      // Settings-only backups write nothing destructive and skip the
+      // confirm; anything carrying routines or programs shows the
+      // overwrite summary first (programs overwrite by id on re-import).
+      if (!list.length && !incomingPrograms.length) {
         await apply();
         return;
       }
@@ -4300,7 +4740,13 @@
             replacing.slice(0, 3).map((ir) => ir.name).join(', ') +
             (replacing.length > 3 ? ', \u2026' : '') + '). '
           : '') +
-          'Adds ' + (list.length - replacing.length) + ' new.',
+          'Adds ' + (list.length - replacing.length) + ' new.' +
+          (incomingPrograms.length
+            ? ' Programs: adds ' +
+              incomingPrograms.filter((ip) => !programs.some((x) => x.id === ip.id)).length +
+              ', overwrites ' +
+              incomingPrograms.filter((ip) => programs.some((x) => x.id === ip.id)).length + '.'
+            : ''),
         confirmLabel: 'Import',
         onConfirm: apply,
       });
@@ -4380,6 +4826,10 @@
     .then((v) => { settings.homeOrder = Array.isArray(v) ? v : null; })
     .then(() => store.getSetting('goals', null))
     .then((v) => { settings.goals = sanitizeGoals(v); })
+    .then(() => store.getSetting('programs', null))
+    .then((v) => {
+      programs = Array.isArray(v) ? v.map(sanitizeProgram).filter(Boolean) : [];
+    })
     .then(() => store.all())
     .then((rows) => { routines = rows || []; })
     .then(() => {
