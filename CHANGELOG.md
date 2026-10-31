@@ -8,6 +8,30 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.13.0] - 2026-10-31
+
+### Added
+- Body composition (Settings): sex, height, weight, neck, waist and hip
+  (women), stored in one profile with a live US Navy body-fat estimate
+  and fat/lean mass. The kg/lb and cm/in units now live here and govern
+  the profile fields and the goal targets alike.
+- Finish-workout prompts are configurable: body weight, waist, neck and
+  hip switches (weight and waist on by default). Every prompted value is
+  saved with the workout and updates the profile, so body fat and the
+  measurement goals follow along without manual re-entry. Neck and hip
+  appear in the finished summary when logged.
+- Body-fat goal: a target percentage next to the weight and waist
+  targets, tracking the Navy estimate. Measurement goals now show their
+  progress percentage, and count goals (workouts, creatine/protein) read
+  "3/4 · 75%".
+
+### Changed
+- Measurement goals read their current value from the body-composition
+  profile (falling back to the latest logged value), and their progress
+  reference is an explicit snapshot taken when the target changes.
+  Existing 1.12.0 goals derive that snapshot once from the log, exactly
+  the way progress was computed before, so nothing jumps.
+
 ## [1.12.0] - 2026-10-31
 
 ### Added

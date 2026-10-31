@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.12.0';
+  const APP_VERSION = '1.13.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -271,7 +271,7 @@
   let storagePersisted = null;
   let view = { name: 'home' }; // home | new | routine | program | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', waistUnit: 'cm', homeChart: null, homeOrder: null, goals: null };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', waistUnit: 'cm', homeChart: null, homeOrder: null, goals: null, bodyProfile: null, finishMetrics: null };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -929,6 +929,27 @@
     const finWarnN = r.exercises.reduce((n, ex) =>
       n + ex.sets.filter((s) => !s.done &&
         (s.reps != null || s.weight != null || s.mins != null || s.dist != null)).length, 0);
+    // Only the metrics enabled in Settings are prompted (#v1.13.0);
+    // every entered value also updates the body-composition profile, so
+    // the Navy body-fat readout and the measurement goals stay current.
+    const fm = settings.finishMetrics ||
+      { weight: true, waist: true, neck: false, hip: false };
+    const female = (settings.bodyProfile && settings.bodyProfile.sex) === 'f';
+    let lenUnit = settings.waistUnit === 'in' ? 'in' : 'cm';
+    const lenSegHTML = () =>
+      '<span class="seg seg-len">' +
+      '<button type="button" class="' + (lenUnit === 'cm' ? 'on' : '') + '" data-lu="cm">cm</button>' +
+      '<button type="button" class="' + (lenUnit === 'in' ? 'on' : '') + '" data-lu="in">in</button>' +
+      '</span>';
+    const measRow = (id, label) =>
+      '<div class="fin-row">' +
+      '<span>' + label + '</span>' +
+      '<span class="fin-bw">' +
+      '<input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" placeholder="optional">' +
+      lenSegHTML() +
+      '</span>' +
+      '</div>';
+
     sheet.innerHTML =
       '<div class="sheet-title">Finish workout?</div>' +
       '<div class="fin-sub">Recorded duration ' + fmtFull(monoNow() - r.startedAt) + '</div>' +
@@ -941,72 +962,90 @@
       '<label class="switch"><input type="checkbox" id="fin-supps"' +
       (settings.suppsLast ? ' checked' : '') + '><span class="sw-track"></span></label>' +
       '</div>' +
-      '<div class="fin-row">' +
-      '<span>Body weight</span>' +
-      '<span class="fin-bw">' +
-      '<input id="fin-bw" type="text" inputmode="decimal" autocomplete="off" placeholder="optional">' +
-      '<span class="seg seg-bw">' +
-      '<button type="button" class="' + (settings.bwUnit === 'lb' ? '' : 'on') + '" data-bw="kg">kg</button>' +
-      '<button type="button" class="' + (settings.bwUnit === 'lb' ? 'on' : '') + '" data-bw="lb">lb</button>' +
-      '</span>' +
-      '</span>' +
-      '</div>' +
-      '<div class="fin-row">' +
-      '<span>Waist</span>' +
-      '<span class="fin-bw">' +
-      '<input id="fin-waist" type="text" inputmode="decimal" autocomplete="off" placeholder="optional">' +
-      '<span class="seg seg-waist">' +
-      '<button type="button" class="' + (settings.waistUnit === 'in' ? '' : 'on') + '" data-wu="cm">cm</button>' +
-      '<button type="button" class="' + (settings.waistUnit === 'in' ? 'on' : '') + '" data-wu="in">in</button>' +
-      '</span>' +
-      '</span>' +
-      '</div>' +
+      (fm.weight
+        ? '<div class="fin-row">' +
+          '<span>Body weight</span>' +
+          '<span class="fin-bw">' +
+          '<input id="fin-bw" type="text" inputmode="decimal" autocomplete="off" placeholder="optional">' +
+          '<span class="seg seg-bw">' +
+          '<button type="button" class="' + (settings.bwUnit === 'lb' ? '' : 'on') + '" data-bw="kg">kg</button>' +
+          '<button type="button" class="' + (settings.bwUnit === 'lb' ? 'on' : '') + '" data-bw="lb">lb</button>' +
+          '</span>' +
+          '</span>' +
+          '</div>'
+        : '') +
+      (fm.waist ? measRow('fin-waist', 'Waist') : '') +
+      (fm.neck ? measRow('fin-neck', 'Neck') : '') +
+      (fm.hip && female ? measRow('fin-hip', 'Hip') : '') +
       '<button class="btn btn-primary btn-block" id="fin-ok" type="button">Finish Workout</button>' +
       '<button class="btn btn-ghost btn-block" id="fin-cancel" type="button">Cancel</button>';
     mountSheet(backdrop, sheet);
 
     let bwUnit = settings.bwUnit === 'lb' ? 'lb' : 'kg';
     const bwIn = document.getElementById('fin-bw');
-    sheet.querySelectorAll('.seg-bw button').forEach((b) => {
+    if (bwIn) {
+      sheet.querySelectorAll('.seg-bw button').forEach((b) => {
+        b.onclick = guard(() => {
+          if (bwUnit === b.dataset.bw) return;
+          bwUnit = b.dataset.bw;
+          sheet.querySelectorAll('.seg-bw button').forEach((x) => x.classList.toggle('on', x === b));
+        });
+      });
+      bwIn.addEventListener('blur', () => {
+        const n = numOrNull(bwIn.value);
+        bwIn.value = n == null ? '' : String(n);
+      });
+    }
+    // One shared length unit drives every girth prompt in the sheet.
+    const lenIn = ['fin-waist', 'fin-neck', 'fin-hip']
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+    sheet.querySelectorAll('.seg-len button').forEach((b) => {
       b.onclick = guard(() => {
-        if (bwUnit === b.dataset.bw) return;
-        bwUnit = b.dataset.bw;
-        sheet.querySelectorAll('.seg-bw button').forEach((x) => x.classList.toggle('on', x === b));
+        if (lenUnit === b.dataset.lu) return;
+        lenUnit = b.dataset.lu;
+        sheet.querySelectorAll('.seg-len button').forEach((x) =>
+          x.classList.toggle('on', x.dataset.lu === lenUnit));
       });
     });
-    bwIn.addEventListener('blur', () => {
-      const n = numOrNull(bwIn.value);
-      bwIn.value = n == null ? '' : String(n);
-    });
-    let waistUnit = settings.waistUnit === 'in' ? 'in' : 'cm';
-    const waIn = document.getElementById('fin-waist');
-    sheet.querySelectorAll('.seg-waist button').forEach((b) => {
-      b.onclick = guard(() => {
-        if (waistUnit === b.dataset.wu) return;
-        waistUnit = b.dataset.wu;
-        sheet.querySelectorAll('.seg-waist button').forEach((x) => x.classList.toggle('on', x === b));
-      });
-    });
-    waIn.addEventListener('blur', () => {
-      const n = numOrNull(waIn.value);
-      waIn.value = n == null ? '' : String(n);
-    });
+    lenIn.forEach((el) => el.addEventListener('blur', () => {
+      const n = numOrNull(el.value);
+      el.value = n == null ? '' : String(n);
+    }));
     backdrop.onclick = guard(closeSheet);
     document.getElementById('fin-cancel').onclick = guard(closeSheet);
     document.getElementById('fin-ok').onclick = guard(() => {
       const supps = document.getElementById('fin-supps').checked;
-      const bw = numOrNull(bwIn.value);
-      const wa = numOrNull(waIn.value);
+      const bw = bwIn ? numOrNull(bwIn.value) : null;
+      const lenVal = {};
+      lenIn.forEach((el) => { lenVal[el.id] = numOrNull(el.value); });
+      const wa = lenVal['fin-waist'] != null ? lenVal['fin-waist'] : null;
+      const nk = lenVal['fin-neck'] != null ? lenVal['fin-neck'] : null;
+      const hp = lenVal['fin-hip'] != null ? lenVal['fin-hip'] : null;
       closeSheet();
       settings.suppsLast = supps;
       settings.bwUnit = bwUnit;
-      settings.waistUnit = waistUnit;
+      settings.waistUnit = lenUnit;
       store.setSetting('suppsLast', supps)
         .catch((e) => console.error('Kaioken: setting save failed', e));
       store.setSetting('bwUnit', bwUnit)
         .catch((e) => console.error('Kaioken: setting save failed', e));
-      store.setSetting('waistUnit', waistUnit)
+      store.setSetting('waistUnit', lenUnit)
         .catch((e) => console.error('Kaioken: setting save failed', e));
+      // Entered metrics update the profile (base units) so body fat and
+      // the measurement goals follow every workout.
+      const prof = settings.bodyProfile || defaultBodyProfile();
+      let profChanged = false;
+      const toCm = (v) => v * (lenUnit === 'in' ? IN_TO_CM : 1);
+      if (bw != null) { prof.weight = bw * (bwUnit === 'lb' ? LB_TO_KG : 1); profChanged = true; }
+      if (wa != null) { prof.waist = toCm(wa); profChanged = true; }
+      if (nk != null) { prof.neck = toCm(nk); profChanged = true; }
+      if (hp != null) { prof.hip = toCm(hp); profChanged = true; }
+      if (profChanged) {
+        settings.bodyProfile = prof;
+        store.setSetting('bodyProfile', prof)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+      }
       const heatBefore = computeHeat();
       stopRest();
       r.status = 'completed';
@@ -1016,7 +1055,11 @@
       r.bodyWeight = bw;
       r.bwUnit = bwUnit;
       r.waist = wa;
-      r.waistUnit = waistUnit;
+      r.waistUnit = lenUnit;
+      r.neck = nk;
+      r.neckUnit = lenUnit;
+      r.hip = hp;
+      r.hipUnit = lenUnit;
       scheduleSave(r, true);
       render();
       const heatAfter = computeHeat();
@@ -1443,43 +1486,104 @@
     return days.size;
   }
 
-  // Measurement goals (body weight, waist): a target value, not a
-  // cumulative count. `current` is the latest logged measurement, `start`
-  // the first one on/after the day the target was last changed (so
-  // editing the target resets progress without touching history).
-  // Progress is clamped to 0-100 and works for both cutting and gaining
-  // (the signs cancel). Every value normalizes to the metric's base unit
-  // (kg / cm) regardless of the unit it was logged or targeted in.
+  // Measurement goals (body weight, waist, body fat): a target value,
+  // not a cumulative count. The "current" value is the body-composition
+  // profile - kept up to date by finish-workout logging and manual edits -
+  // falling back to the latest logged measurement. `start` is a snapshot
+  // of the current value taken when the target was last changed, so
+  // editing the target resets progress without touching history; goals
+  // from before snapshots existed derive it once from the log (the first
+  // measurement on/after `since`). Progress is clamped to 0-100 and works
+  // for both cutting and gaining (the signs cancel). Values normalize to
+  // the metric's base unit (kg / cm) regardless of entry units; body fat
+  // is the US Navy estimate computed from the profile.
   const MEAS_GOALS = [
-    { key: 'weight', label: 'Body weight', field: 'bodyWeight', unitField: 'bwUnit', alt: 'lb', factor: LB_TO_KG, hint: 'log weight after a workout' },
-    { key: 'waist', label: 'Waist', field: 'waist', unitField: 'waistUnit', alt: 'in', factor: IN_TO_CM, hint: 'log waist after a workout' },
+    { key: 'weight', label: 'Body weight', field: 'bodyWeight', unitField: 'bwUnit', profKey: 'weight', alt: 'lb', factor: LB_TO_KG, hint: 'enter your weight in Body composition' },
+    { key: 'waist', label: 'Waist', field: 'waist', unitField: 'waistUnit', profKey: 'waist', alt: 'in', factor: IN_TO_CM, hint: 'enter your waist in Body composition' },
+    { key: 'bf', label: 'Body fat', field: null, unitField: null, profKey: null, alt: null, factor: 1, hint: 'enter height, neck and waist in Body composition' },
   ];
+
+  // US Navy body-fat estimate from the profile (all centimeters): men
+  // need height, neck and waist; women also need hip. Implausible
+  // results (or impossible girth combinations) read as "not calculable".
+  function navyBodyFat(p) {
+    if (!p || !(p.height > 0) || !(p.neck > 0) || !(p.waist > 0)) return null;
+    let bf = null;
+    if (p.sex === 'f') {
+      if (!(p.hip > 0)) return null;
+      const x = p.waist + p.hip - p.neck;
+      if (!(x > 0)) return null;
+      bf = 495 / (1.29579 - 0.35004 * Math.log10(x) + 0.22100 * Math.log10(p.height)) - 450;
+    } else {
+      const x = p.waist - p.neck;
+      if (!(x > 0)) return null;
+      bf = 495 / (1.0324 - 0.19077 * Math.log10(x) + 0.15456 * Math.log10(p.height)) - 450;
+    }
+    if (!isFinite(bf) || bf < 3 || bf > 60) return null;
+    return Math.round(bf * 10) / 10;
+  }
+
+  // The current value of a measurement: the profile entry first (finish
+  // logging keeps it fresh), else the latest logged value, in base units.
+  function currentMeasure(cfg) {
+    if (cfg.key === 'bf') return navyBodyFat(settings.bodyProfile);
+    const p = settings.bodyProfile;
+    if (p && p[cfg.profKey] != null) return p[cfg.profKey];
+    let best = null;
+    completedRoutines().forEach((r) => {
+      if (r[cfg.field] == null) return;
+      const ts = r.endedAt || r.createdAt || 0;
+      const base = r[cfg.field] * (r[cfg.unitField] === cfg.alt ? cfg.factor : 1);
+      if (!best || ts >= best.ts) best = { ts: ts, base: base };
+    });
+    return best ? best.base : null;
+  }
+
+  // Snapshot the progress reference for goals that lack one: targets set
+  // while no measurement existed yet, and pre-snapshot goals (which
+  // derive it from the log exactly the way 1.12.0 did).
+  function ensureMeasurementStarts() {
+    const g = settings.goals;
+    if (!g) return;
+    let changed = false;
+    MEAS_GOALS.forEach((cfg) => {
+      const goal = g[cfg.key];
+      if (!goal || goal.start != null) return;
+      const cur = currentMeasure(cfg);
+      if (cur == null) return;
+      let start = null;
+      if (cfg.field) {
+        completedRoutines().forEach((r) => {
+          if (r[cfg.field] == null) return;
+          if (goal.since && r.date < goal.since) return;
+          const ts = r.endedAt || r.createdAt || 0;
+          const base = r[cfg.field] * (r[cfg.unitField] === cfg.alt ? cfg.factor : 1);
+          if (!start || ts < start.ts) start = { ts: ts, base: base };
+        });
+      }
+      goal.start = start != null ? start.base : cur;
+      changed = true;
+    });
+    if (changed) {
+      store.setSetting('goals', g)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+    }
+  }
 
   function measureGoalInfo(cfg) {
     const g = settings.goals && settings.goals[cfg.key];
     if (!g) return null;
-    const toBase = (v, u) => v * (u === cfg.alt ? cfg.factor : 1);
-    const fromBase = (b) => (g.unit === cfg.alt ? b / cfg.factor : b);
-    let start = null;
-    let current = null;
-    completedRoutines().forEach((r) => {
-      if (r[cfg.field] == null) return;
-      const base = toBase(r[cfg.field], r[cfg.unitField]);
-      const ts = r.endedAt || r.createdAt || 0;
-      if (!current || ts >= current.ts) current = { ts: ts, base: base };
-      if (!g.since || r.date >= g.since) {
-        if (!start || ts < start.ts) start = { ts: ts, base: base };
-      }
-    });
-    if (!current) return { g: g, empty: true };
-    if (!start) start = current;
-    const targetBase = toBase(g.target, g.unit);
+    const current = currentMeasure(cfg);
+    if (current == null) return { g: g, empty: true };
+    const fromBase = (b) => (cfg.alt && g.unit === cfg.alt ? b / cfg.factor : b);
+    const targetBase = cfg.alt ? g.target * (g.unit === cfg.alt ? cfg.factor : 1) : g.target;
+    const start = (g.start != null && g.start > 0) ? g.start : current;
     let pct = 0;
-    if (Math.abs(current.base - targetBase) < 0.05) pct = 100;
+    if (Math.abs(current - targetBase) < (cfg.alt ? 0.05 : 0.1)) pct = 100;
     else {
-      const total = start.base - targetBase;
+      const total = start - targetBase;
       if (Math.abs(total) > 1e-9) {
-        pct = Math.max(0, Math.min(100, Math.round(100 * (start.base - current.base) / total)));
+        pct = Math.max(0, Math.min(100, Math.round(100 * (start - current) / total)));
       }
     }
     return { g: g, empty: false, current: current, targetBase: targetBase, pct: pct, fromBase: fromBase };
@@ -1498,6 +1602,7 @@
   function goalsHTML() {
     const g = settings.goals;
     if (!g) return '';
+    ensureMeasurementStarts();
     const rows = [];
     const periods = [['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly']];
     if (g.workouts) {
@@ -1506,8 +1611,8 @@
         if (!(t > 0)) return;
         const w = goalWindow(p[0]);
         const n = completedInRange(w[0], w[1]).length;
-        rows.push(goalRowHTML(p[1] + ' workouts', n + '/' + t,
-          Math.min(100, Math.round(100 * n / t)), n >= t));
+        const pct = Math.min(100, Math.round(100 * n / t));
+        rows.push(goalRowHTML(p[1] + ' workouts', n + '/' + t + ' \u00b7 ' + pct + '%', pct, n >= t));
       });
     }
     if (g.supps) {
@@ -1516,8 +1621,8 @@
         if (!(t > 0)) return;
         const w = goalWindow(p[0]);
         const n = suppsDaysInRange(completedInRange(w[0], w[1]));
-        rows.push(goalRowHTML(p[1] + ' creatine/protein', n + '/' + t,
-          Math.min(100, Math.round(100 * n / t)), n >= t));
+        const pct = Math.min(100, Math.round(100 * n / t));
+        rows.push(goalRowHTML(p[1] + ' creatine/protein', n + '/' + t + ' \u00b7 ' + pct + '%', pct, n >= t));
       });
     }
     MEAS_GOALS.forEach((cfg) => {
@@ -1529,11 +1634,12 @@
           '<span class="goal-val muted-small">' + cfg.hint + '</span>' +
           '</span></div>');
       } else {
-        const u = info.g.unit;
+        const us = cfg.alt ? ' ' + info.g.unit : '%';
         const val = info.pct >= 100
-          ? fmt1(info.fromBase(info.targetBase)) + ' ' + u + ' reached'
-          : fmt1(info.fromBase(info.current.base)) + ' \u2192 ' + fmt1(info.fromBase(info.targetBase)) + ' ' + u +
-            ' \u00b7 ' + fmt1(info.fromBase(Math.abs(info.current.base - info.targetBase))) + ' to go';
+          ? fmt1(info.fromBase(info.targetBase)) + us + ' reached'
+          : fmt1(info.fromBase(info.current)) + ' \u2192 ' + fmt1(info.fromBase(info.targetBase)) + us +
+            ' \u00b7 ' + info.pct + '% \u00b7 ' +
+            fmt1(info.fromBase(Math.abs(info.current - info.targetBase))) + ' to go';
         rows.push(goalRowHTML(cfg.label, val, info.pct, info.pct >= 100));
       }
     });
@@ -1895,6 +2001,10 @@
       (r.bodyWeight == null ? '\u2013' : r.bodyWeight + ' ' + esc(r.bwUnit || 'kg')) + '</b></div>' +
       '<div class="sum-row"><span>Waist</span><b>' +
       (r.waist == null ? '\u2013' : r.waist + ' ' + esc(r.waistUnit || 'cm')) + '</b></div>' +
+      (r.neck == null ? '' : '<div class="sum-row"><span>Neck</span><b>' +
+        r.neck + ' ' + esc(r.neckUnit || 'cm') + '</b></div>') +
+      (r.hip == null ? '' : '<div class="sum-row"><span>Hip</span><b>' +
+        r.hip + ' ' + esc(r.hipUnit || 'cm') + '</b></div>') +
       '</div>';
   }
 
@@ -4199,6 +4309,40 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  // Body-composition profile: base units only (cm / kg), every field
+  // optional. Body fat is computed from these, never stored.
+  function defaultBodyProfile() {
+    return { sex: 'm', height: null, weight: null, neck: null, waist: null, hip: null };
+  }
+
+  function sanitizeBodyProfile(p) {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const num = (v) => {
+      const n = toNum(v);
+      return (n != null && n > 0) ? n : null;
+    };
+    return {
+      sex: p.sex === 'f' ? 'f' : 'm',
+      height: num(p.height),
+      weight: num(p.weight),
+      neck: num(p.neck),
+      waist: num(p.waist),
+      hip: num(p.hip),
+    };
+  }
+
+  // Which body metrics are prompted when a workout finishes: weight and
+  // waist default to on (the pre-1.13.0 sheet), neck and hip to off.
+  function sanitizeFinishMetrics(v) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    return {
+      weight: v.weight !== false,
+      waist: v.waist !== false,
+      neck: v.neck === true,
+      hip: v.hip === true,
+    };
+  }
+
   // Goals (#65): the saved shape is validated in one place so the
   // settings card, the app-init path and imported backups all agree.
   // Absent/zero/negative targets drop out; an all-empty object is null
@@ -4223,16 +4367,27 @@
     const meas = (src, base, alt) => {
       const t = toNum(src && src.target);
       if (t == null || !(t > 0)) return;
+      const start = toNum(src && src.start);
       return {
         target: t,
         unit: src.unit === alt ? alt : base,
         since: validDate(src.since) ? src.since : todayISO(),
+        start: (start != null && start > 0) ? start : null,
       };
     };
     const wt = meas(g.weight, 'kg', 'lb');
     if (wt) out.weight = wt;
     const wa = meas(g.waist, 'cm', 'in');
     if (wa) out.waist = wa;
+    const bt = toNum(g.bf && g.bf.target);
+    if (bt != null && bt > 0 && bt < 100) {
+      const bStart = toNum(g.bf.start);
+      out.bf = {
+        target: bt,
+        since: validDate(g.bf.since) ? g.bf.since : todayISO(),
+        start: (bStart != null && bStart > 0 && bStart < 100) ? bStart : null,
+      };
+    }
     return Object.keys(out).length ? out : null;
   }
 
@@ -4321,6 +4476,10 @@
     r.bwUnit = r.bwUnit === 'lb' ? 'lb' : 'kg';
     r.waist = toNum(r.waist);
     r.waistUnit = r.waistUnit === 'in' ? 'in' : 'cm';
+    r.neck = toNum(r.neck);
+    r.neckUnit = r.neckUnit === 'in' ? 'in' : 'cm';
+    r.hip = toNum(r.hip);
+    r.hipUnit = r.hipUnit === 'in' ? 'in' : 'cm';
     // Routines started from a program carry its id (#62): validated as an
     // opaque string so imports cannot smuggle objects into the record.
     r.programId = (typeof r.programId === 'string' && r.programId)
@@ -4389,6 +4548,16 @@
       settings.waistUnit = s.waistUnit;
       put('waistUnit', s.waistUnit);
     }
+    const prof = sanitizeBodyProfile(s.bodyProfile);
+    if (prof) {
+      settings.bodyProfile = prof;
+      put('bodyProfile', prof);
+    }
+    const fmet = sanitizeFinishMetrics(s.finishMetrics);
+    if (fmet) {
+      settings.finishMetrics = fmet;
+      put('finishMetrics', fmet);
+    }
     // A pinned chart with an unknown tab renders through the fall-through
     // branch as the muscles chart and persists across reloads (#35):
     // accept only the tabs the app can actually display.
@@ -4410,19 +4579,98 @@
     }
   }
 
-  // The measurement-goal display units live between renders (the card is
+  // The measurement display units live between renders (the cards are
   // rebuilt on every render, the toggles must not reset them mid-edit).
+  // They govern the profile fields and the goal targets alike: units
+  // describe the person, so they are set once, here.
   const goalUnits = { weight: null, waist: null };
 
-  function goalSettingsCardHTML() {
+  function ensureGoalUnits() {
     const g = settings.goals || {};
-    const gv = (o, k) => ((g[o] && g[o][k]) != null ? g[o][k] : '');
     if (!goalUnits.weight) {
       goalUnits.weight = (g.weight && g.weight.unit) || settings.bwUnit;
     }
     if (!goalUnits.waist) {
       goalUnits.waist = (g.waist && g.waist.unit) || settings.waistUnit;
     }
+  }
+
+  // The US Navy readout for the profile card; recomputed in place when a
+  // field changes (no full re-render while typing).
+  function bodyFatReadoutHTML() {
+    const p = settings.bodyProfile || defaultBodyProfile();
+    const female = p.sex === 'f';
+    const bf = navyBodyFat(p);
+    if (bf == null) {
+      return 'Enter height, neck and waist' + (female ? ', hip' : '') + ' to calculate body fat.';
+    }
+    const wU = goalUnits.weight || settings.bwUnit;
+    const fw = (kg) => fmt1(wU === 'lb' ? kg / LB_TO_KG : kg) + ' ' + wU;
+    return '<b>' + bf + '%</b> body fat (US Navy)' +
+      (p.weight != null
+        ? ' \u00b7 fat ' + fw(p.weight * bf / 100) + ' \u00b7 lean ' + fw(p.weight * (100 - bf) / 100)
+        : '');
+  }
+
+  function bodyProfileCardHTML() {
+    ensureGoalUnits();
+    const p = settings.bodyProfile || defaultBodyProfile();
+    const female = p.sex === 'f';
+    const wU = goalUnits.weight;
+    const lU = goalUnits.waist;
+    const fm = settings.finishMetrics ||
+      { weight: true, waist: true, neck: false, hip: false };
+    const disp = (base, isLen) => (base == null ? '' :
+      String(Math.round((isLen
+        ? (lU === 'in' ? base / IN_TO_CM : base)
+        : (wU === 'lb' ? base / LB_TO_KG : base)) * 100) / 100));
+    const bpField = (id, label, value, unit) =>
+      '<div class="goal-f"><span>' + label + '</span>' +
+      '<span class="goal-bw">' +
+      '<input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" placeholder="\u2013" value="' + esc(value) + '">' +
+      '<span class="goal-u">' + unit + '</span>' +
+      '</span></div>';
+    const fmSwitch = (id, label, on) =>
+      '<div class="goal-f"><span>' + label + '</span>' +
+      '<label class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="sw-track"></span></label>' +
+      '</div>';
+    return '<div class="card">' +
+      '<div class="field"><span>Body composition</span></div>' +
+      '<div class="goal-f"><span>Sex</span>' +
+      '<span class="seg seg-sx">' +
+      '<button type="button" class="' + (!female ? 'on' : '') + '" data-sx="m">Male</button>' +
+      '<button type="button" class="' + (female ? 'on' : '') + '" data-sx="f">Female</button>' +
+      '</span></div>' +
+      '<div class="goal-f"><span>Units</span>' +
+      '<span class="bp-units">' +
+      '<span class="seg seg-gu">' +
+      '<button type="button" class="' + (wU === 'kg' ? 'on' : '') + '" data-gu="kg">kg</button>' +
+      '<button type="button" class="' + (wU === 'lb' ? 'on' : '') + '" data-gu="lb">lb</button>' +
+      '</span>' +
+      '<span class="seg seg-wu">' +
+      '<button type="button" class="' + (lU === 'cm' ? 'on' : '') + '" data-wu="cm">cm</button>' +
+      '<button type="button" class="' + (lU === 'in' ? 'on' : '') + '" data-wu="in">in</button>' +
+      '</span>' +
+      '</span></div>' +
+      bpField('bp-height', 'Height', disp(p.height, true), lU) +
+      bpField('bp-weight', 'Weight', disp(p.weight, false), wU) +
+      bpField('bp-neck', 'Neck', disp(p.neck, true), lU) +
+      bpField('bp-waist', 'Waist', disp(p.waist, true), lU) +
+      (female ? bpField('bp-hip', 'Hip', disp(p.hip, true), lU) : '') +
+      '<div class="bp-bf" id="bp-bf">' + bodyFatReadoutHTML() + '</div>' +
+      '<div class="field"><span>Prompt at workout finish</span></div>' +
+      fmSwitch('fm-weight', 'Body weight', fm.weight) +
+      fmSwitch('fm-waist', 'Waist', fm.waist) +
+      fmSwitch('fm-neck', 'Neck', fm.neck) +
+      (female ? fmSwitch('fm-hip', 'Hip', fm.hip) : '') +
+      '<p class="hint">Every field is optional, but body fat needs them all. Finishing a workout updates the prompted fields here automatically. The Navy estimate uses height, neck and waist (plus hip for women).</p>' +
+      '</div>';
+  }
+
+  function goalSettingsCardHTML() {
+    ensureGoalUnits();
+    const g = settings.goals || {};
+    const gv = (o, k) => ((g[o] && g[o][k]) != null ? g[o][k] : '');
     const gf = (id, label, mode, value) =>
       '<div class="goal-f"><span>' + label + '</span>' +
       '<input id="' + id + '" type="text" inputmode="' + mode + '" autocomplete="off" placeholder="off" value="' + esc(String(value)) + '"></div>';
@@ -4437,23 +4685,24 @@
       '<span class="goal-bw">' +
       '<input id="gf-wt" type="text" inputmode="decimal" autocomplete="off" placeholder="off" value="' +
       esc(g.weight ? String(g.weight.target) : '') + '">' +
-      '<span class="seg seg-gu">' +
-      '<button type="button" class="' + (goalUnits.weight === 'kg' ? 'on' : '') + '" data-gu="kg">kg</button>' +
-      '<button type="button" class="' + (goalUnits.weight === 'lb' ? 'on' : '') + '" data-gu="lb">lb</button>' +
-      '</span>' +
+      '<span class="goal-u">' + goalUnits.weight + '</span>' +
       '</span>' +
       '</div>' +
       '<div class="goal-f"><span>Waist target</span>' +
       '<span class="goal-bw">' +
       '<input id="gf-wa" type="text" inputmode="decimal" autocomplete="off" placeholder="off" value="' +
       esc(g.waist ? String(g.waist.target) : '') + '">' +
-      '<span class="seg seg-wu">' +
-      '<button type="button" class="' + (goalUnits.waist === 'cm' ? 'on' : '') + '" data-wu="cm">cm</button>' +
-      '<button type="button" class="' + (goalUnits.waist === 'in' ? 'on' : '') + '" data-wu="in">in</button>' +
-      '</span>' +
+      '<span class="goal-u">' + goalUnits.waist + '</span>' +
       '</span>' +
       '</div>' +
-      '<p class="hint">Empty or 0 turns a goal off. Workout and creatine/protein goals count calendar weeks (Monday-start), months and years of finished workouts - shown as progress bars on Home. The body-weight and waist goals track your latest logged measurement toward the target; progress counts from the day the target was last changed. Waist is logged next to body weight when you finish a workout.</p>' +
+      '<div class="goal-f"><span>Body-fat target</span>' +
+      '<span class="goal-bw">' +
+      '<input id="gf-bf" type="text" inputmode="decimal" autocomplete="off" placeholder="off" value="' +
+      esc(g.bf ? String(g.bf.target) : '') + '">' +
+      '<span class="goal-u">%</span>' +
+      '</span>' +
+      '</div>' +
+      '<p class="hint">Empty or 0 turns a goal off. Workout and creatine/protein goals count calendar weeks (Monday-start), months and years of finished workouts - shown as progress bars with percentages on Home. The measurement goals track the value from Body composition (kept current by workout logging) toward the target; progress counts from the day the target was last changed. The body-fat goal follows the US Navy estimate.</p>' +
       '</div>';
   }
 
@@ -4478,6 +4727,8 @@
           suppsLast: settings.suppsLast,
           bwUnit: settings.bwUnit,
           waistUnit: settings.waistUnit,
+          bodyProfile: settings.bodyProfile,
+          finishMetrics: settings.finishMetrics,
           homeChart: settings.homeChart,
           homeOrder: settings.homeOrder,
           goals: settings.goals,
@@ -4530,6 +4781,7 @@
       '</div></label>' +
       '<p class="hint">Starts automatically when you mark a set as done during a workout. You can skip it any time.</p>' +
       '</div>' +
+      bodyProfileCardHTML() +
       goalSettingsCardHTML() +
       '<div class="card">' +
       '<p class="hint">Your routines and settings (except the background photo, which stays on this device) are stored only on this device. Export regularly and keep a copy somewhere safe (Notes, email, cloud storage). Paste a backup below to restore it or move it to a new phone.</p>' +
@@ -4603,10 +4855,68 @@
       };
     });
 
+    // Body composition (#v1.13.0): fields save on change (display units
+    // convert to the base units the profile stores); the readout updates
+    // in place. Finishing a workout writes the prompted metrics here.
+    const saveProfileFromInputs = () => {
+      const prof = settings.bodyProfile || defaultBodyProfile();
+      const readLen = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return null;
+        const n = toNum(el.value);
+        return (n != null && n > 0) ? n * (goalUnits.waist === 'in' ? IN_TO_CM : 1) : null;
+      };
+      const wEl = document.getElementById('bp-weight');
+      let w = null;
+      if (wEl) {
+        const n = toNum(wEl.value);
+        w = (n != null && n > 0) ? n * (goalUnits.weight === 'lb' ? LB_TO_KG : 1) : null;
+      }
+      prof.height = readLen('bp-height');
+      prof.weight = w;
+      prof.neck = readLen('bp-neck');
+      prof.waist = readLen('bp-waist');
+      if (document.getElementById('bp-hip')) prof.hip = readLen('bp-hip');
+      settings.bodyProfile = prof;
+      store.setSetting('bodyProfile', prof)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+      const bfEl = document.getElementById('bp-bf');
+      if (bfEl) bfEl.innerHTML = bodyFatReadoutHTML();
+    };
+    ['bp-height', 'bp-weight', 'bp-neck', 'bp-waist', 'bp-hip'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', saveProfileFromInputs);
+    });
+    $app.querySelectorAll('.seg-sx button').forEach((b) => {
+      b.onclick = () => {
+        const sx = b.dataset.sx;
+        const prof = settings.bodyProfile || defaultBodyProfile();
+        if (prof.sex === sx) return;
+        prof.sex = sx;
+        settings.bodyProfile = prof;
+        store.setSetting('bodyProfile', prof)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+        render(); // hip field and hip switch appear for women
+      };
+    });
+    [['fm-weight', 'weight'], ['fm-waist', 'waist'], ['fm-neck', 'neck'], ['fm-hip', 'hip']].forEach((pair) => {
+      const el = document.getElementById(pair[0]);
+      if (!el) return;
+      el.addEventListener('change', () => {
+        const cur = settings.finishMetrics ||
+          { weight: true, waist: true, neck: false, hip: false };
+        cur[pair[1]] = el.checked;
+        settings.finishMetrics = sanitizeFinishMetrics(cur) ||
+          { weight: true, waist: true, neck: false, hip: false };
+        store.setSetting('finishMetrics', settings.finishMetrics)
+          .catch((e) => console.error('Kaioken: setting save failed', e));
+      });
+    });
+
     // Goals (#65): saved on every change; empty/0 simply turns that goal
-    // off. Editing a measurement target (or its unit) re-stamps `since`,
-    // so progress restarts from the new reference without touching
-    // history.
+    // off. Changing a measurement target re-stamps `since` and snapshots
+    // the current value as the progress reference; an unchanged target
+    // (re-saved or round-tripped through a unit toggle) keeps both.
     const gfInt = (id) => {
       const el = document.getElementById(id);
       if (!el) return 0;
@@ -4624,51 +4934,84 @@
         const t = el ? toNum(el.value) : null;
         if (t == null || !(t > 0)) return;
         let since = todayISO();
+        let start = null;
+        let preserved = false;
         const prev = settings.goals && settings.goals[key];
         if (prev) {
           // The previous target expressed in the newly picked unit: an
-          // unchanged target (just re-saved) keeps its progress reference.
-          // Unit toggles convert with 2-decimal rounding, so the
-          // comparison tolerates a sub-0.25 nudge - a round trip through
-          // the other unit must not count as changing the target.
+          // unchanged target keeps its progress reference. Unit toggles
+          // convert with 2-decimal rounding, so the comparison tolerates
+          // a sub-0.25 nudge - a round trip through the other unit must
+          // not count as changing the target.
           const prevInNewUnit = prev.unit === goalUnits[key]
             ? prev.target
             : (prev.unit === alt ? prev.target * factor : prev.target / factor);
-          if (Math.abs(prevInNewUnit - t) < 0.25) since = prev.since;
+          if (Math.abs(prevInNewUnit - t) < 0.25) {
+            since = prev.since;
+            const ps = toNum(prev.start);
+            start = (ps != null && ps > 0) ? ps : null;
+            preserved = true;
+          }
         }
-        return { target: t, unit: goalUnits[key], since: since };
+        if (!preserved) {
+          const cfg = MEAS_GOALS.find((c) => c.key === key);
+          start = cfg ? currentMeasure(cfg) : null;
+        }
+        return { target: t, unit: goalUnits[key], since: since, start: start };
       };
       const wt = measRaw('gf-wt', 'weight', 'lb', LB_TO_KG);
       if (wt) raw.weight = wt;
       const wa = measRaw('gf-wa', 'waist', 'in', IN_TO_CM);
       if (wa) raw.waist = wa;
+      const bfEl = document.getElementById('gf-bf');
+      const bt = bfEl ? toNum(bfEl.value) : null;
+      if (bt != null && bt > 0 && bt < 100) {
+        const prev = settings.goals && settings.goals.bf;
+        const preserved = prev && Math.abs(prev.target - bt) < 0.05;
+        let start = null;
+        if (preserved) {
+          const ps = toNum(prev.start);
+          start = (ps != null && ps > 0) ? ps : null;
+        } else {
+          start = navyBodyFat(settings.bodyProfile);
+        }
+        raw.bf = { target: bt, since: preserved ? prev.since : todayISO(), start: start };
+      }
       settings.goals = sanitizeGoals(raw);
       store.setSetting('goals', settings.goals)
         .catch((e) => console.error('Kaioken: setting save failed', e));
     };
-    ['gf-wo-week', 'gf-wo-month', 'gf-wo-year', 'gf-su-week', 'gf-su-month', 'gf-wt', 'gf-wa'].forEach((id) => {
+    ['gf-wo-week', 'gf-wo-month', 'gf-wo-year', 'gf-su-week', 'gf-su-month', 'gf-wt', 'gf-wa', 'gf-bf'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', saveGoals);
     });
-    const bindGoalUnitSeg = (segSel, inputId, key, alt, factor) => {
+    // Unit segs live in Body composition and drive both the profile
+    // fields and the goal targets. Goal targets are stored in display
+    // units, so their inputs are converted and re-saved; the profile is
+    // stored in base units and its inputs simply re-render, so a unit
+    // round trip can never drift the stored measurements.
+    const bindGoalUnitSeg = (segSel, key, alt, factor, inputIds) => {
       $app.querySelectorAll(segSel + ' button').forEach((b) => {
         b.onclick = () => {
           const u = b.dataset.wu || b.dataset.gu;
           if (u === goalUnits[key]) return;
-          const el = document.getElementById(inputId);
-          const t = toNum(el.value);
-          if (t != null && t > 0) {
-            const base = goalUnits[key] === alt ? t * factor : t;
-            el.value = String(Math.round((u === alt ? base / factor : base) * 100) / 100);
-          }
+          inputIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const t = toNum(el.value);
+            if (t != null && t > 0) {
+              const base = goalUnits[key] === alt ? t * factor : t;
+              el.value = String(Math.round((u === alt ? base / factor : base) * 100) / 100);
+            }
+          });
           goalUnits[key] = u;
-          $app.querySelectorAll(segSel + ' button').forEach((x) => x.classList.toggle('on', x === b));
           saveGoals();
+          render();
         };
       });
     };
-    bindGoalUnitSeg('.seg-gu', 'gf-wt', 'weight', 'lb', LB_TO_KG);
-    bindGoalUnitSeg('.seg-wu', 'gf-wa', 'waist', 'in', IN_TO_CM);
+    bindGoalUnitSeg('.seg-gu', 'weight', 'lb', LB_TO_KG, ['gf-wt']);
+    bindGoalUnitSeg('.seg-wu', 'waist', 'in', IN_TO_CM, ['gf-wa']);
 
     document.getElementById('act-gen').onclick = () => {
       document.getElementById('ta-export').value = buildExport();
@@ -4904,6 +5247,13 @@
     .then((u) => { settings.bwUnit = u === 'lb' ? 'lb' : 'kg'; })
     .then(() => store.getSetting('waistUnit', 'cm'))
     .then((u) => { settings.waistUnit = u === 'in' ? 'in' : 'cm'; })
+    .then(() => store.getSetting('bodyProfile', null))
+    .then((v) => { settings.bodyProfile = sanitizeBodyProfile(v) || defaultBodyProfile(); })
+    .then(() => store.getSetting('finishMetrics', null))
+    .then((v) => {
+      settings.finishMetrics = sanitizeFinishMetrics(v) ||
+        { weight: true, waist: true, neck: false, hip: false };
+    })
     .then(() => store.getSetting('homeChart', null))
     .then((v) => { settings.homeChart = v && typeof v === 'object' && v.tab ? v : null; })
     .then(() => store.getSetting('homeOrder', null))

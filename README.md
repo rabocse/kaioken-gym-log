@@ -45,12 +45,16 @@ No App Store, no account, no server — your data stays on your phone.
 - Pin any chart to Home from its options sheet: it stays interactive
   there, its options sheet edits and persists the pin, and tapping its
   title opens Stats on that graph
+- Body composition (Settings): height, weight, neck, waist and hip (for
+  women) with a live US Navy body-fat estimate plus fat/lean mass — kept
+  current by workout logging, and you choose which metrics are prompted
+  when a workout finishes
 - Goals (Settings): weekly/monthly/yearly workout targets, weekly/monthly
-  creatine/protein day targets (counted per day, not per workout) and
-  body-weight (kg/lb) and waist (cm/in) targets — shown as progress bars
-  in a reorderable Home section; measurement goals track your latest
-  logged value from the day the target was set (logged next to body
-  weight when finishing a workout)
+  creatine/protein day targets (counted per day, not per workout),
+  body-weight (kg/lb), waist (cm/in) and body-fat (%) targets — shown as
+  progress bars with percentages in a reorderable Home section;
+  measurement goals track the value from Body composition from the day
+  the target was set
 - Programs: group routine templates under one name (New Program on Home,
   or Add to Program from any routine's action sheet); a program card shows
   its routines, the next one up and a done/total chip for the week, and

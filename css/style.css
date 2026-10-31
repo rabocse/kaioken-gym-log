@@ -707,6 +707,19 @@ input[type="date"] {
 .goal-f input { width: 96px; text-align: center; }
 .goal-bw { display: inline-flex; align-items: center; gap: 8px; }
 .seg-gu button { min-width: 40px; min-height: 40px; }
+.goal-u { color: var(--muted); font-size: 13px; min-width: 24px; text-align: center; }
+.bp-bf {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card2);
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.bp-bf b { color: var(--accent-text); font-size: 15px; }
+.bp-units { display: inline-flex; align-items: center; gap: 8px; }
+.seg-sx button { min-width: 64px; min-height: 40px; }
 
 /* ---------- timer + summary ---------- */
 .timer { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
