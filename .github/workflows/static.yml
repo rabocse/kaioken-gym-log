@@ -22,8 +22,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
+  # Syntax gate + browser harness. Nothing is published unless this passes.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install harness dependencies
+        run: npm ci
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Verify (syntax + 92 browser checks)
+        run: npm run verify
+      - name: Keep failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-failure
+          path: test-results/
+          if-no-files-found: ignore
+
   deploy:
+    needs: verify
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -31,13 +56,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Stage the site
+        # Allowlist, not the whole repo: the dev server sources, the harness,
+        # package files and workflows are not part of the published app.
+        run: |
+          mkdir -p _site
+          cp -R index.html manifest.webmanifest sw.js css js icons img _site/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          path: _site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
