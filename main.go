@@ -54,9 +54,19 @@ func serveCmd(args []string) {
 	addr := fset.String("addr", "127.0.0.1:8080", "listen address")
 	_ = fset.Parse(args)
 
+	const csp = "default-src 'self'; base-uri 'none'; object-src 'none'; " +
+		"form-action 'self'; img-src 'self' data:; style-src 'self'"
+
 	files := http.FileServer(http.FS(webFiles))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := strings.ToLower(r.URL.Path)
+		// Hardening for `-addr :8080` on a shared network. The types are
+		// always explicit, so sniffing only adds risk; the CSP mirrors the
+		// page's <meta> policy so it is enforced before the meta parses.
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if p == "/" || strings.HasSuffix(p, ".html") {
+			w.Header().Set("Content-Security-Policy", csp)
+		}
 		if strings.HasSuffix(p, ".webmanifest") {
 			w.Header().Set("Content-Type", "application/manifest+json")
 		}

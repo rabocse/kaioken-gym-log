@@ -5,6 +5,7 @@
   "version": "1.9.1",
   "start_url": ".",
   "scope": ".",
+  "id": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f1316",

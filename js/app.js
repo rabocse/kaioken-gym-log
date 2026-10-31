@@ -3,6 +3,16 @@
 
   const APP_VERSION = '1.9.1';
 
+  /* ---------- session clock (#50) ---------- */
+  // The wall clock can jump under an NTP correction or a timezone change,
+  // which would distort a workout's duration mid-session. Anchor a
+  // monotonic clock to the wall clock at boot: stored timestamps stay
+  // wall-clock-comparable, but elapsed time is immune to jumps while the
+  // page stays open. Across a reload, the wall clock is authoritative again.
+  const bootWall = Date.now();
+  const bootPerf = performance.now();
+  const monoNow = () => bootWall + (performance.now() - bootPerf);
+
   /* ---------- clickjacking backstop (#45) ---------- */
   // frame-ancestors cannot be expressed in a <meta> CSP and GitHub Pages
   // cannot set response headers, so any origin could embed the app and
@@ -616,7 +626,7 @@
     if (!secs) return;
     stopRest();
     restTotal = secs * 1000;
-    restEndAt = Date.now() + restTotal;
+    restEndAt = monoNow() + restTotal;
 
     const bar = document.createElement('div');
     bar.id = 'restbar';
@@ -637,7 +647,7 @@
   function tickRest() {
     const el = document.getElementById('rest-time');
     if (!el) { stopRest(); return; }
-    const left = restEndAt - Date.now();
+    const left = restEndAt - monoNow();
     if (left <= 0) {
       if (restInt) { clearInterval(restInt); restInt = null; }
       el.textContent = 'Go';
@@ -909,7 +919,7 @@
         (s.reps != null || s.weight != null || s.mins != null || s.dist != null)).length, 0);
     sheet.innerHTML =
       '<div class="sheet-title">Finish workout?</div>' +
-      '<div class="fin-sub">Recorded duration ' + fmtFull(Date.now() - r.startedAt) + '</div>' +
+      '<div class="fin-sub">Recorded duration ' + fmtFull(monoNow() - r.startedAt) + '</div>' +
       (finWarnN
         ? '<div class="fin-sub fin-warn">' + finWarnN +
         (finWarnN === 1 ? ' set is' : ' sets are') + ' not marked done \u2014 finish anyway?</div>'
@@ -961,7 +971,7 @@
       const heatBefore = computeHeat();
       stopRest();
       r.status = 'completed';
-      r.endedAt = Date.now();
+      r.endedAt = monoNow();
       r.date = todayISO();
       r.supps = supps;
       r.bodyWeight = bw;
@@ -1320,7 +1330,7 @@
   function statusCardHTML(r) {
     if (r.status === 'active') {
       return '<div class="card timer-card">' +
-        '<span class="timer" id="elapsed">' + fmtClock(Date.now() - r.startedAt) + '</span>' +
+        '<span class="timer" id="elapsed">' + fmtClock(monoNow() - r.startedAt) + '</span>' +
         '<span class="timer-sub">· started ' +
         new Date(r.startedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) +
         '</span></div>';
@@ -1912,7 +1922,7 @@
           danger: false,
           onConfirm: () => {
             r.status = 'active';
-            r.startedAt = Date.now();
+            r.startedAt = monoNow();
             scheduleSave(r, true);
             render();
           },
@@ -1920,7 +1930,7 @@
         return;
       }
       r.status = 'active';
-      r.startedAt = Date.now();
+      r.startedAt = monoNow();
       scheduleSave(r, true);
       render();
     };
@@ -2224,7 +2234,7 @@
       timerInt = setInterval(() => {
         const el = document.getElementById('elapsed');
         if (!el) { stopTimer(); return; }
-        el.textContent = fmtClock(Date.now() - r.startedAt);
+        el.textContent = fmtClock(monoNow() - r.startedAt);
       }, 500);
     }
   }
