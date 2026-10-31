@@ -165,7 +165,7 @@ Go + SQLite backend can sit behind the same UI — the data model in
 
 ## Roadmap ideas
 
-- Per-exercise history ("retrieve from log", like StrengthLog)
+- Per-exercise history ("retrieve from log")
 - Optional Go + SQLite sync backend
 
 ## Say thanks
