@@ -267,7 +267,7 @@
   let storagePersisted = null;
   let view = { name: 'home' }; // home | new | routine | settings | stats
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', homeChart: null, homeOrder: null };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', homeChart: null, homeOrder: null, goals: null };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -557,6 +557,9 @@
       if (!c) return;
       el.style.height = el.dataset.h + '%';
       el.style.background = c;
+    });
+    root.querySelectorAll('.goal-fill[data-w]').forEach((el) => {
+      el.style.width = el.dataset.w + '%';
     });
     root.querySelectorAll('.bd-dot[data-cat]').forEach((el) => {
       const c = GYMLOG_CAT_COLORS[el.dataset.cat];
@@ -1035,6 +1038,130 @@
     };
   }
 
+  /* ---------- goals (#65) ---------- */
+  // Calendar windows for goal progress: a Monday-start week (the same
+  // buckets the volume charts use), the current month and the current
+  // year. computeHeat's rolling 7 days is for the theme; goals are
+  // "this week/month/year" targets, so they use calendar windows.
+  function goalWindow(period) {
+    const now = new Date();
+    if (period === 'month') {
+      return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth() + 1, 1)];
+    }
+    if (period === 'year') {
+      return [new Date(now.getFullYear(), 0, 1), new Date(now.getFullYear() + 1, 0, 1)];
+    }
+    const ws = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    ws.setDate(ws.getDate() - (ws.getDay() + 6) % 7);
+    return [ws, new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 7)];
+  }
+
+  function completedInRange(start, end) {
+    return completedRoutines().filter((r) => {
+      const d = routineDate(r);
+      return d && d >= start && d < end;
+    });
+  }
+
+  // Creatine/protein adherence counts days, not workouts: two finished
+  // workouts on one day with supps logged still count as one day.
+  function suppsDaysInRange(list) {
+    const days = new Set();
+    list.forEach((r) => { if (r.supps === true) days.add(r.date); });
+    return days.size;
+  }
+
+  // Body-weight goal: a target value, not a cumulative count. `current`
+  // is the latest logged weigh-in, `start` the first one on/after the day
+  // the target was last changed (so editing the target resets progress
+  // without touching history). Progress is clamped to 0-100 and works for
+  // both cutting and gaining (the signs cancel).
+  function weightGoalInfo() {
+    const g = settings.goals && settings.goals.weight;
+    if (!g) return null;
+    const toKg = (v, u) => v * (u === 'lb' ? LB_TO_KG : 1);
+    let start = null;
+    let current = null;
+    completedRoutines().forEach((r) => {
+      if (r.bodyWeight == null) return;
+      const kg = toKg(r.bodyWeight, r.bwUnit);
+      const ts = r.endedAt || r.createdAt || 0;
+      if (!current || ts >= current.ts) current = { ts: ts, kg: kg };
+      if (!g.since || r.date >= g.since) {
+        if (!start || ts < start.ts) start = { ts: ts, kg: kg };
+      }
+    });
+    const fromKg = (kg) => (g.unit === 'lb' ? kg / LB_TO_KG : kg);
+    if (!current) return { g: g, empty: true };
+    if (!start) start = current;
+    const targetKg = toKg(g.target, g.unit);
+    let pct = 0;
+    if (Math.abs(current.kg - targetKg) < 0.05) pct = 100;
+    else {
+      const total = start.kg - targetKg;
+      if (Math.abs(total) > 1e-9) {
+        pct = Math.max(0, Math.min(100, Math.round(100 * (start.kg - current.kg) / total)));
+      }
+    }
+    return { g: g, empty: false, start: start, current: current, targetKg: targetKg, pct: pct, fromKg: fromKg };
+  }
+
+  function goalRowHTML(label, value, pct, done) {
+    return '<div class="goal-row' + (done ? ' done' : '') + '">' +
+      '<span class="goal-top">' +
+      '<span class="goal-label">' + esc(label) + '</span>' +
+      '<span class="goal-val">' + esc(value) + '</span>' +
+      '</span>' +
+      '<span class="goal-track"><span class="goal-fill" data-w="' + pct + '"></span></span>' +
+      '</div>';
+  }
+
+  function goalsHTML() {
+    const g = settings.goals;
+    if (!g) return '';
+    const rows = [];
+    const periods = [['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly']];
+    if (g.workouts) {
+      periods.forEach((p) => {
+        const t = g.workouts[p[0]];
+        if (!(t > 0)) return;
+        const w = goalWindow(p[0]);
+        const n = completedInRange(w[0], w[1]).length;
+        rows.push(goalRowHTML(p[1] + ' workouts', n + '/' + t,
+          Math.min(100, Math.round(100 * n / t)), n >= t));
+      });
+    }
+    if (g.supps) {
+      periods.slice(0, 2).forEach((p) => {
+        const t = g.supps[p[0]];
+        if (!(t > 0)) return;
+        const w = goalWindow(p[0]);
+        const n = suppsDaysInRange(completedInRange(w[0], w[1]));
+        rows.push(goalRowHTML(p[1] + ' creatine/protein', n + '/' + t,
+          Math.min(100, Math.round(100 * n / t)), n >= t));
+      });
+    }
+    const wg = weightGoalInfo();
+    if (wg) {
+      if (wg.empty) {
+        rows.push('<div class="goal-row"><span class="goal-top">' +
+          '<span class="goal-label">Body weight</span>' +
+          '<span class="goal-val muted-small">log weight after a workout</span>' +
+          '</span></div>');
+      } else {
+        const u = wg.g.unit;
+        const val = wg.pct >= 100
+          ? fmt1(wg.fromKg(wg.targetKg)) + ' ' + u + ' reached'
+          : fmt1(wg.fromKg(wg.current.kg)) + ' \u2192 ' + fmt1(wg.fromKg(wg.targetKg)) + ' ' + u +
+            ' \u00b7 ' + fmt1(wg.fromKg(Math.abs(wg.current.kg - wg.targetKg))) + ' to go';
+        rows.push(goalRowHTML('Body weight', val, wg.pct, wg.pct >= 100));
+      }
+    }
+    if (!rows.length) return '';
+    return '<div class="section-label">Goals</div>' +
+      '<div class="card goal-card">' + rows.join('') + '</div>';
+  }
+
   /* ---------- home ---------- */
   function installHint() {
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
@@ -1204,6 +1331,7 @@
     // history block; the order persists in the settings store.
     const secs = {
       cal: calHTML,
+      goals: goalsHTML(),
       chart: settings.homeChart ? homeChartHTML() : '',
       new: '<button class="btn btn-primary btn-block btn-new" id="act-new">' + I.plus + '<span>New Routine</span></button>',
       active: sectionHTML('Active', active.map((r) => itemHTML(r, today)), ''),
@@ -3495,7 +3623,7 @@
   // sections that appeared later (or were never saved) keep their default
   // spot at the end.
   function homeOrderOrDefault() {
-    const all = ['cal', 'chart', 'new', 'active', 'scheduled', 'history'];
+    const all = ['cal', 'goals', 'chart', 'new', 'active', 'scheduled', 'history'];
     const saved = Array.isArray(settings.homeOrder) ? settings.homeOrder : [];
     const out = saved.filter((id) => all.indexOf(id) !== -1);
     all.forEach((id) => { if (out.indexOf(id) === -1) out.push(id); });
@@ -3664,6 +3792,38 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  // Goals (#65): the saved shape is validated in one place so the
+  // settings card, the app-init path and imported backups all agree.
+  // Absent/zero/negative targets drop out; an all-empty object is null
+  // (goals off).
+  function sanitizeGoals(g) {
+    if (!g || typeof g !== 'object' || Array.isArray(g)) return null;
+    const out = {};
+    const counts = (src, periods) => {
+      if (!src || typeof src !== 'object') return;
+      const o = {};
+      let any = false;
+      periods.forEach((k) => {
+        const n = Math.floor(toNum(src[k]) || 0);
+        if (n > 0) { o[k] = n; any = true; }
+      });
+      if (any) return o;
+    };
+    const wo = counts(g.workouts, ['week', 'month', 'year']);
+    if (wo) out.workouts = wo;
+    const su = counts(g.supps, ['week', 'month']);
+    if (su) out.supps = su;
+    const t = toNum(g.weight && g.weight.target);
+    if (t != null && t > 0) {
+      out.weight = {
+        target: t,
+        unit: g.weight.unit === 'lb' ? 'lb' : 'kg',
+        since: validDate(g.weight.since) ? g.weight.since : todayISO(),
+      };
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
   function sanitizeRoutine(r) {
     // The routine's own id is validated exactly like the nested exercise
     // and set ids: IndexedDB accepts numbers and (for puts) rejects
@@ -3789,6 +3949,46 @@
       settings.homeOrder = s.homeOrder;
       put('homeOrder', s.homeOrder);
     }
+    const goals = sanitizeGoals(s.goals);
+    if (goals) {
+      settings.goals = goals;
+      goalUnit = null; // re-derive the weight-goal display unit on next render
+      put('goals', goals);
+    }
+  }
+
+  // The weight-goal display unit lives between renders (the card is
+  // rebuilt on every render, the toggle must not reset it mid-edit).
+  let goalUnit = null;
+
+  function goalSettingsCardHTML() {
+    const g = settings.goals || {};
+    const gv = (o, k) => ((g[o] && g[o][k]) != null ? g[o][k] : '');
+    if (!goalUnit) {
+      goalUnit = (g.weight && g.weight.unit) || settings.bwUnit;
+    }
+    const gf = (id, label, mode, value) =>
+      '<div class="goal-f"><span>' + label + '</span>' +
+      '<input id="' + id + '" type="text" inputmode="' + mode + '" autocomplete="off" placeholder="off" value="' + esc(String(value)) + '"></div>';
+    return '<div class="card">' +
+      '<div class="field"><span>Goals</span></div>' +
+      gf('gf-wo-week', 'Workouts / week', 'numeric', gv('workouts', 'week')) +
+      gf('gf-wo-month', 'Workouts / month', 'numeric', gv('workouts', 'month')) +
+      gf('gf-wo-year', 'Workouts / year', 'numeric', gv('workouts', 'year')) +
+      gf('gf-su-week', 'Creatine / protein days / week', 'numeric', gv('supps', 'week')) +
+      gf('gf-su-month', 'Creatine / protein days / month', 'numeric', gv('supps', 'month')) +
+      '<div class="goal-f"><span>Body-weight target</span>' +
+      '<span class="goal-bw">' +
+      '<input id="gf-wt" type="text" inputmode="decimal" autocomplete="off" placeholder="off" value="' +
+      esc(g.weight ? String(g.weight.target) : '') + '">' +
+      '<span class="seg seg-gu">' +
+      '<button type="button" class="' + (goalUnit === 'kg' ? 'on' : '') + '" data-gu="kg">kg</button>' +
+      '<button type="button" class="' + (goalUnit === 'lb' ? 'on' : '') + '" data-gu="lb">lb</button>' +
+      '</span>' +
+      '</span>' +
+      '</div>' +
+      '<p class="hint">Empty or 0 turns a goal off. Workout and creatine/protein goals count calendar weeks (Monday-start), months and years of finished workouts - shown as progress bars on Home. The body-weight goal tracks your latest logged weight toward the target; progress counts from the day the target was last changed.</p>' +
+      '</div>';
   }
 
   function renderSettings() {
@@ -3812,6 +4012,7 @@
           bwUnit: settings.bwUnit,
           homeChart: settings.homeChart,
           homeOrder: settings.homeOrder,
+          goals: settings.goals,
         },
       },
       null, 2
@@ -3861,6 +4062,7 @@
       '</div></label>' +
       '<p class="hint">Starts automatically when you mark a set as done during a workout. You can skip it any time.</p>' +
       '</div>' +
+      goalSettingsCardHTML() +
       '<div class="card">' +
       '<p class="hint">Your routines and settings (except the background photo, which stays on this device) are stored only on this device. Export regularly and keep a copy somewhere safe (Notes, email, cloud storage). Paste a backup below to restore it or move it to a new phone.</p>' +
       '<p class="hint">' + (storagePersisted === true
@@ -3930,6 +4132,58 @@
         $app.querySelectorAll('.seg-rest button').forEach((x) => x.classList.toggle('on', x === b));
         store.setSetting('rest', settings.rest)
           .catch((e) => console.error('Kaioken: setting save failed', e));
+      };
+    });
+
+    // Goals (#65): saved on every change; empty/0 simply turns that goal
+    // off. Editing the weight target (or its unit) re-stamps `since`, so
+    // progress restarts from the new reference without touching history.
+    const gfInt = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return 0;
+      const n = Math.floor(toNum(el.value) || 0);
+      return (isFinite(n) && n > 0) ? n : 0;
+    };
+    const saveGoals = () => {
+      const raw = {};
+      const wo = { week: gfInt('gf-wo-week'), month: gfInt('gf-wo-month'), year: gfInt('gf-wo-year') };
+      if (wo.week || wo.month || wo.year) raw.workouts = wo;
+      const su = { week: gfInt('gf-su-week'), month: gfInt('gf-su-month') };
+      if (su.week || su.month) raw.supps = su;
+      const wtEl = document.getElementById('gf-wt');
+      const t = wtEl ? toNum(wtEl.value) : null;
+      if (t != null && t > 0) {
+        let since = todayISO();
+        const prev = settings.goals && settings.goals.weight;
+        if (prev) {
+          const prevInNewUnit = prev.unit === goalUnit
+            ? prev.target
+            : (prev.unit === 'lb' ? prev.target * LB_TO_KG : prev.target / LB_TO_KG);
+          if (Math.abs(prevInNewUnit - t) < 1e-9) since = prev.since;
+        }
+        raw.weight = { target: t, unit: goalUnit, since: since };
+      }
+      settings.goals = sanitizeGoals(raw);
+      store.setSetting('goals', settings.goals)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+    };
+    ['gf-wo-week', 'gf-wo-month', 'gf-wo-year', 'gf-su-week', 'gf-su-month', 'gf-wt'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', saveGoals);
+    });
+    $app.querySelectorAll('.seg-gu button').forEach((b) => {
+      b.onclick = () => {
+        const u = b.dataset.gu;
+        if (u === goalUnit) return;
+        const wtEl = document.getElementById('gf-wt');
+        const t = toNum(wtEl.value);
+        if (t != null && t > 0) {
+          const kg = goalUnit === 'lb' ? t / LB_TO_KG : t;
+          wtEl.value = String(Math.round((u === 'lb' ? kg / LB_TO_KG : kg) * 10) / 10);
+        }
+        goalUnit = u;
+        $app.querySelectorAll('.seg-gu button').forEach((x) => x.classList.toggle('on', x === b));
+        saveGoals();
       };
     });
 
@@ -4124,6 +4378,8 @@
     .then((v) => { settings.homeChart = v && typeof v === 'object' && v.tab ? v : null; })
     .then(() => store.getSetting('homeOrder', null))
     .then((v) => { settings.homeOrder = Array.isArray(v) ? v : null; })
+    .then(() => store.getSetting('goals', null))
+    .then((v) => { settings.goals = sanitizeGoals(v); })
     .then(() => store.all())
     .then((rows) => { routines = rows || []; })
     .then(() => {

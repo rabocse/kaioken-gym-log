@@ -690,6 +690,23 @@ input[type="date"] {
   appearance: none;
 }
 
+/* ---------- goals (#65) ---------- */
+.goal-card { padding: 6px 16px; }
+.goal-row { display: flex; flex-direction: column; gap: 5px; padding: 9px 0; }
+.goal-row + .goal-row { border-top: 1px solid var(--border); }
+.goal-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.goal-label { color: var(--muted); font-size: 13.5px; }
+.goal-val { color: var(--text); font-weight: 600; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+.goal-row.done .goal-val { color: var(--accent-text); }
+.goal-track { display: block; height: 4px; border-radius: 2px; background: var(--card2); overflow: hidden; }
+.goal-fill { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--accent); transition: width 0.3s; }
+.goal-row.done .goal-fill { background: var(--accent); }
+.goal-f { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; }
+.goal-f > span:first-child { color: var(--muted); font-size: 13.5px; }
+.goal-f input { width: 96px; text-align: center; }
+.goal-bw { display: inline-flex; align-items: center; gap: 8px; }
+.seg-gu button { min-width: 40px; min-height: 40px; }
+
 /* ---------- timer + summary ---------- */
 .timer { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
 
