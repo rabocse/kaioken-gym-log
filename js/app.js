@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.9.1';
+  const APP_VERSION = '1.10.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -1327,14 +1327,18 @@
   }
 
   /* ---------- routine detail ---------- */
+  // An active routine replaces the date row with a compact sticky strip:
+  // the elapsed clock plus the two actions that end the session. The date
+  // is not editable mid-workout (the finished summary still shows it).
+  function workoutStripHTML(r) {
+    return '<div class="workout-strip">' +
+      '<span class="timer" id="elapsed">' + fmtClock(monoNow() - r.startedAt) + '</span>' +
+      '<button class="btn btn-strip btn-primary" id="act-finish" type="button">' + I.stop + '<span>Finish</span></button>' +
+      '<button class="btn btn-strip btn-ghost" id="act-abandon" type="button">Abandon</button>' +
+      '</div>';
+  }
+
   function statusCardHTML(r) {
-    if (r.status === 'active') {
-      return '<div class="card timer-card">' +
-        '<span class="timer" id="elapsed">' + fmtClock(monoNow() - r.startedAt) + '</span>' +
-        '<span class="timer-sub">· started ' +
-        new Date(r.startedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) +
-        '</span></div>';
-    }
     if (r.status === 'scheduled') {
       if (r.date > todayISO()) {
         return '<div class="card note">Scheduled for ' + esc(fmtDate(r.date)) +
@@ -1560,6 +1564,15 @@
       ? doneN + '/' + ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets')
       : ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets');
 
+    // Secondary actions live in the controls row, not beside the name: the
+    // head is reserved for the name so a long catalog entry stays readable.
+    // During a workout the delete x joins them too, leaving [fold][name].
+    const moveBtns = movable
+      ? '<button class="btn btn-icon btn-move btn-move-up" type="button" aria-label="Move exercise up">' + I.up + '</button>' +
+        '<button class="btn btn-icon btn-move btn-move-down" type="button" aria-label="Move exercise down">' + I.down + '</button>'
+      : '';
+    const delBtn = '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.x + '</button>';
+
     return '<div class="card ex-card' + (folded ? ' folded' : '') + '" data-eid="' + esc(ex.id) + '" data-cardio="' + (cardio ? '1' : '') + '">' +
       '<div class="ex-head">' +
       (active
@@ -1567,16 +1580,14 @@
           (folded ? 'Unfold exercise' : 'Fold exercise') + '">' + I.chev + '</button>'
         : '') +
       '<input class="ex-name" placeholder="Exercise name" value="' + esc(ex.name) + '" maxlength="48" autocomplete="off" autocapitalize="words">' +
-      unitSeg +
-      (movable
-        ? '<button class="btn btn-icon btn-move btn-move-up" type="button" aria-label="Move exercise up">' + I.up + '</button>' +
-          '<button class="btn btn-icon btn-move btn-move-down" type="button" aria-label="Move exercise down">' + I.down + '</button>'
-        : '') +
-      '<button class="btn btn-icon btn-del-ex" type="button" aria-label="Remove exercise">' + I.x + '</button>' +
+      (active ? '' : delBtn) +
       '</div>' +
       '<div class="sug-box" hidden></div>' +
       '<div class="ex-controls">' +
       '<button class="btn btn-ghost btn-warmup" type="button" aria-label="Add warm-up set">' + I.plus + '<span>Warm up</span></button>' +
+      unitSeg +
+      moveBtns +
+      (active ? delBtn : '') +
       '<span class="ex-meta">' +
       '<span class="cat-tag">' + esc(gymlogCategoryOf(ex.name)) + '</span>' +
       '<span class="muted-small">' + meta + '</span>' +
@@ -1831,10 +1842,10 @@
       '<button class="btn btn-icon" id="act-more" aria-label="More actions">' + I.dots + '</button>' +
       '<button class="btn btn-icon btn-danger" id="act-del" aria-label="Delete routine">' + I.trash + '</button>' +
       '</header>' +
-      (r.status === 'scheduled' || r.status === 'active'
+      (r.status === 'scheduled'
         ? '<label class="field rdate"><span>Date</span><input type="date" id="in-rdate" value="' + esc(r.date) + '"></label>'
         : '') +
-      statusCardHTML(r) +
+      (r.status === 'active' ? workoutStripHTML(r) : statusCardHTML(r)) +
       (r.status === 'completed' && shareableRoutine(r)
         ? '<button class="btn btn-primary btn-block" id="act-share" type="button">' + I.share +
           '<span>Share highlight</span></button>'
@@ -1857,11 +1868,9 @@
       } else {
         barHTML = '<button class="btn btn-primary btn-block" id="act-start" type="button">' + I.play + '<span>Start Workout</span></button>';
       }
-    } else if (r.status === 'active') {
-      twoButtonBar = true;
-      barHTML = '<button class="btn btn-primary btn-block btn-stop" id="act-finish" type="button">' + I.stop + '<span>Finish Workout</span></button>' +
-        '<button class="btn btn-ghost btn-block" id="act-abandon" type="button">Abandon</button>';
     }
+    // Finish / Abandon live in the sticky top strip while a workout runs, so
+    // an active routine has no bottom bar (and no large reserved padding).
     if (barHTML) {
       const bar = document.createElement('div');
       bar.id = 'actionbar';

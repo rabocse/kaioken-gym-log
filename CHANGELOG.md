@@ -8,6 +8,23 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.10.0] - 2026-10-31
+
+### Changed
+- The exercise name now owns its row. The weight/distance unit selector and
+  the reorder arrows moved down into the controls row next to "Warm up",
+  and while a workout is running the remove button joins them too, leaving
+  only the fold chevron and the name in the header. Long catalog names such
+  as "Single-Arm Cable Lateral Raise" are readable in full instead of
+  clipped to a few characters.
+- A running workout shows a compact sticky strip under the title with the
+  elapsed clock and Finish / Abandon. It replaces both the date field (not
+  editable mid-workout anyway) and the large bottom action bar, freeing the
+  bottom of the screen for the exercise list. The finished summary still
+  shows the date.
+- The rest timer is slimmer (18px digits, 3px progress, smaller skip button)
+  and sits at the bottom edge now that the action bar is gone.
+
 ## [1.9.1] - 2026-10-31
 
 ### Fixed

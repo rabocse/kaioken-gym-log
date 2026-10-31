@@ -449,9 +449,7 @@ input, textarea, select { touch-action: manipulation; }
 
 body.has-bar #app { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 body.has-bar2 #app { padding-bottom: calc(184px + env(safe-area-inset-bottom)); }
-body.has-rest #app { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
-body.has-bar.has-rest #app { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
-body.has-bar2.has-rest #app { padding-bottom: calc(256px + env(safe-area-inset-bottom)); }
+body.has-rest #app { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 
 /* ---------- top bar ---------- */
 .topbar { display: flex; align-items: center; gap: 4px; margin: 2px 0 16px; }
@@ -693,9 +691,26 @@ input[type="date"] {
 }
 
 /* ---------- timer + summary ---------- */
-.timer-card { display: flex; align-items: baseline; justify-content: center; gap: 6px; padding: 10px 16px; }
 .timer { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
-.timer-sub { color: var(--muted); font-size: 13.5px; }
+
+/* Sticky workout header: elapsed clock plus the actions that end the session.
+   It replaces the date row while a routine is active, so the bottom of the
+   screen stays clear for the exercise list. */
+.workout-strip {
+  position: sticky;
+  top: env(safe-area-inset-top);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -16px 12px;
+  padding: 6px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.workout-strip .timer { flex: 1; font-size: 18px; }
+.btn-strip { min-height: 44px; padding: 6px 14px; font-size: 13.5px; font-weight: 600; }
+.btn-strip svg { width: 16px; height: 16px; }
 
 .sum-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; font-size: 15px; }
 .sum-row span { color: var(--muted); }
@@ -703,9 +718,10 @@ input[type="date"] {
 .sum-row + .sum-row { border-top: 1px solid var(--border); }
 
 /* ---------- exercises ---------- */
-.ex-head { display: flex; flex-wrap: wrap; row-gap: 4px; gap: 8px; align-items: center; margin-bottom: 10px; }
+.ex-head { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .ex-head .ex-name {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 700;
   font-size: 17px;
   background: transparent;
@@ -717,10 +733,15 @@ input[type="date"] {
 }
 .ex-head .ex-name::placeholder { color: var(--muted); opacity: 0.7; }
 .ex-head .ex-name:focus { outline: none; border-bottom-color: var(--accent); }
-.ex-head .seg { flex: none; }
-.ex-head .seg button { padding: 3px 8px; font-size: 12px; min-width: 34px; min-height: 44px; }
-.ex-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+@media (max-width: 370px) {
+  .ex-head .ex-name { font-size: 16px; }
+}
+.ex-controls { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 6px; align-items: center; margin-bottom: 8px; }
+.ex-controls .seg { flex: none; }
 .ex-controls .seg button { padding: 4px 10px; font-size: 13px; min-width: 40px; }
+.ex-controls .btn-icon { min-width: 40px; min-height: 40px; }
+.ex-controls .btn-icon svg { width: 20px; height: 20px; }
+.ex-controls .ex-meta { margin-left: auto; }
 .muted-small { color: var(--muted); font-size: 13.5px; }
 
 /* workout focus: folded exercises hide their rows, units and add button */
@@ -946,6 +967,9 @@ input[type="date"] {
   white-space: nowrap;
 }
 .ex-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+@media (max-width: 380px) {
+  .ex-controls .cat-tag { display: none; }
+}
 .set-line { display: flex; align-items: baseline; gap: 10px; padding: 5px 0; font-variant-numeric: tabular-nums; }
 .set-line .set-idx { width: 18px; text-align: left; }
 .set-line .mult { width: 10px; }
@@ -982,26 +1006,24 @@ input[type="date"] {
   z-index: 9;
   max-width: 560px;
   margin: 0 auto;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  padding: 6px 16px calc(6px + env(safe-area-inset-bottom));
   background: var(--bar-bg);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--border);
 }
-body.has-bar #restbar { bottom: calc(86px + env(safe-area-inset-bottom)); }
-body.has-bar2 #restbar { bottom: calc(146px + env(safe-area-inset-bottom)); }
-.rest-row { display: flex; align-items: center; gap: 12px; }
+.rest-row { display: flex; align-items: center; gap: 8px; }
 .rest-label {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
 }
-#rest-time { flex: 1; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#rest-time { flex: 1; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 #restbar.go #rest-time { color: var(--accent); }
-#restbar .btn-icon { min-width: 44px; min-height: 44px; }
-.rest-track { height: 4px; margin-top: 6px; border-radius: 2px; background: var(--card2); overflow: hidden; }
+#restbar .btn-icon { min-width: 40px; min-height: 40px; }
+.rest-track { height: 3px; margin-top: 4px; border-radius: 2px; background: var(--card2); overflow: hidden; }
 #rest-fill { height: 100%; width: 100%; border-radius: 2px; background: var(--accent); }
 
 /* ---------- volume chart ---------- */
