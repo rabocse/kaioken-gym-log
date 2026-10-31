@@ -8,6 +8,23 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.12.0] - 2026-10-31
+
+### Added
+- Waist measurement: an optional field next to body weight in the finish
+  sheet (cm/in), saved with the routine, shown in the finished summary,
+  and a waist target goal in Settings with the same progress semantics as
+  the body-weight goal (latest logged value toward the target, progress
+  counted from the day the target was last changed, bidirectional). Both
+  measurement goals normalize units, so a goal set in cm reads log-ins
+  made in inches and vice versa.
+
+### Fixed
+- The body-weight goal's kg/lb unit toggle in Settings converted the
+  target value with the wrong operation when switching from lb to kg
+  (introduced with goals in 1.11.0); the shared measurement toggle now
+  converts correctly in both directions, for weight and waist alike.
+
 ## [1.11.0] - 2026-10-31
 
 ### Added
