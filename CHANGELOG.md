@@ -8,6 +8,19 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.14.0] - 2026-10-31
+
+### Changed
+- Measurement goal bars are labeled scales now: the value when the target
+  was set anchors the 0% end, the target anchors the 100% end, and the
+  fill grows between them as the value moves - a weight goal reads
+  literally as filling from 110 kg down to 100 kg.
+- The body-fat goal bar is a segmented scale of the standard five
+  Navy-method categories (essential, athletes, fitness, average, obese;
+  sex-specific ranges, colored blue / green / lime / amber / red) with a
+  clearly marked current position (white marker) and target position
+  (accent marker) on top.
+
 ## [1.13.0] - 2026-10-31
 
 ### Added

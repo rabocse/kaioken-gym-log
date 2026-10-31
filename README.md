@@ -54,7 +54,10 @@ No App Store, no account, no server — your data stays on your phone.
   body-weight (kg/lb), waist (cm/in) and body-fat (%) targets — shown as
   progress bars with percentages in a reorderable Home section;
   measurement goals track the value from Body composition from the day
-  the target was set
+  the target was set, on bars labeled with their start and target values,
+  and the body-fat bar is a segmented scale of the five standard
+  Navy-method categories (essential, athletes, fitness, average, obese —
+  sex-specific ranges) with your current and target positions marked
 - Programs: group routine templates under one name (New Program on Home,
   or Add to Program from any routine's action sheet); a program card shows
   its routines, the next one up and a done/total chip for the week, and

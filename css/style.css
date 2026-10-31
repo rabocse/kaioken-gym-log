@@ -702,6 +702,58 @@ input[type="date"] {
 .goal-track { display: block; height: 4px; border-radius: 2px; background: var(--card2); overflow: hidden; }
 .goal-fill { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--accent); transition: width 0.3s; }
 .goal-row.done .goal-fill { background: var(--accent); }
+/* measurement goal scale: endpoint labels anchor the bar to the value
+   when the target was set (0%) and the target itself (100%) */
+.goal-scale { display: block; }
+.goal-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* body-fat goal: the standard Navy-method category bands with the
+   current and target positions marked on top */
+.bf-scale { position: relative; display: block; }
+.bf-track {
+  position: relative;
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--card2);
+  overflow: hidden;
+}
+.bf-sec { position: absolute; top: 0; bottom: 0; }
+.bf-essential { background: #60a5fa; }
+.bf-athletes { background: #34d399; }
+.bf-fitness { background: #a3e635; }
+.bf-average { background: #fbbf24; }
+.bf-obese { background: #f87171; }
+.bf-mark { position: absolute; top: -3px; width: 2px; height: 16px; border-radius: 1px; }
+.bf-cur { background: var(--text); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.bf-cur::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.bf-tgt { background: var(--accent); top: -1px; height: 12px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.bf-lbls { position: relative; display: block; height: 13px; margin-top: 3px; }
+.bf-lbl {
+  position: absolute;
+  top: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 9.5px;
+  color: var(--muted);
+}
 .goal-f { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; }
 .goal-f > span:first-child { color: var(--muted); font-size: 13.5px; }
 .goal-f input { width: 96px; text-align: center; }

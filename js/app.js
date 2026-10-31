@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.13.0';
+  const APP_VERSION = '1.14.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -564,6 +564,17 @@
     });
     root.querySelectorAll('.goal-fill[data-w]').forEach((el) => {
       el.style.width = el.dataset.w + '%';
+    });
+    root.querySelectorAll('.bf-sec[data-l]').forEach((el) => {
+      el.style.left = el.dataset.l + '%';
+      el.style.width = el.dataset.w + '%';
+    });
+    root.querySelectorAll('.bf-lbl[data-l]').forEach((el) => {
+      el.style.left = el.dataset.l + '%';
+      el.style.width = el.dataset.w + '%';
+    });
+    root.querySelectorAll('.bf-mark[data-x]').forEach((el) => {
+      el.style.left = el.dataset.x + '%';
     });
     root.querySelectorAll('.bd-dot[data-cat]').forEach((el) => {
       const c = GYMLOG_CAT_COLORS[el.dataset.cat];
@@ -1586,16 +1597,66 @@
         pct = Math.max(0, Math.min(100, Math.round(100 * (start - current) / total)));
       }
     }
-    return { g: g, empty: false, current: current, targetBase: targetBase, pct: pct, fromBase: fromBase };
+    return { g: g, empty: false, start: start, current: current, targetBase: targetBase, pct: pct, fromBase: fromBase };
   }
 
-  function goalRowHTML(label, value, pct, done) {
+  // Body-fat display bands for the Navy method: the standard five-way
+  // classification (essential / athletes / fitness / average / obese),
+  // sex-specific, drawn as one segmented scale with the current and the
+  // target positions marked.
+  const BF_CATS = {
+    m: { axis: 40, cats: [
+      { name: 'Essential', from: 2, cls: 'bf-essential' },
+      { name: 'Athletes', from: 6, cls: 'bf-athletes' },
+      { name: 'Fitness', from: 14, cls: 'bf-fitness' },
+      { name: 'Average', from: 18, cls: 'bf-average' },
+      { name: 'Obese', from: 25, cls: 'bf-obese' },
+    ] },
+    f: { axis: 45, cats: [
+      { name: 'Essential', from: 10, cls: 'bf-essential' },
+      { name: 'Athletes', from: 14, cls: 'bf-athletes' },
+      { name: 'Fitness', from: 21, cls: 'bf-fitness' },
+      { name: 'Average', from: 25, cls: 'bf-average' },
+      { name: 'Obese', from: 32, cls: 'bf-obese' },
+    ] },
+  };
+
+  function bfScaleHTML(current, target, female) {
+    const cfg = female ? BF_CATS.f : BF_CATS.m;
+    const axis = cfg.axis;
+    // Positions are percentages of the scale; markers clamp inside it so
+    // extreme values stay visible instead of sliding off the end.
+    const pos = (v) => Math.max(0, Math.min(98, Math.round(1000 * v / axis) / 10));
+    let secs = '';
+    let lbls = '';
+    cfg.cats.forEach((c, i) => {
+      const to = (i + 1 < cfg.cats.length) ? cfg.cats[i + 1].from : axis;
+      const l = Math.round(1000 * c.from / axis) / 10;
+      const w = Math.round(1000 * (to - c.from) / axis) / 10;
+      secs += '<span class="bf-sec ' + c.cls + '" data-l="' + l + '" data-w="' + w + '"></span>';
+      lbls += '<span class="bf-lbl" data-l="' + l + '" data-w="' + w + '">' + esc(c.name) + '</span>';
+    });
+    return '<span class="bf-scale">' +
+      '<span class="bf-track">' + secs + '</span>' +
+      '<span class="bf-mark bf-cur" data-x="' + pos(current) +
+      '" title="Current: ' + esc(String(current)) + '%"></span>' +
+      '<span class="bf-mark bf-tgt" data-x="' + pos(target) +
+      '" title="Target: ' + esc(String(target)) + '%"></span>' +
+      '<span class="bf-lbls">' + lbls + '</span>' +
+      '</span>';
+  }
+
+  // The track is swappable: count goals get the plain fill bar,
+  // measurement goals a labeled start-to-target scale, the body-fat
+  // goal the category bands.
+  function goalRowHTML(label, value, pct, done, trackHTML) {
     return '<div class="goal-row' + (done ? ' done' : '') + '">' +
       '<span class="goal-top">' +
       '<span class="goal-label">' + esc(label) + '</span>' +
       '<span class="goal-val">' + esc(value) + '</span>' +
       '</span>' +
-      '<span class="goal-track"><span class="goal-fill" data-w="' + pct + '"></span></span>' +
+      (trackHTML != null ? trackHTML :
+        '<span class="goal-track"><span class="goal-fill" data-w="' + pct + '"></span></span>') +
       '</div>';
   }
 
@@ -1640,7 +1701,23 @@
           : fmt1(info.fromBase(info.current)) + ' \u2192 ' + fmt1(info.fromBase(info.targetBase)) + us +
             ' \u00b7 ' + info.pct + '% \u00b7 ' +
             fmt1(info.fromBase(Math.abs(info.current - info.targetBase))) + ' to go';
-        rows.push(goalRowHTML(cfg.label, val, info.pct, info.pct >= 100));
+        let track = null;
+        if (cfg.key === 'bf') {
+          const female = (settings.bodyProfile && settings.bodyProfile.sex) === 'f';
+          track = bfScaleHTML(info.current, info.targetBase, female);
+        } else {
+          // A labeled scale: the weight/waist when the target was set
+          // anchors the 0% end, the target anchors the 100% end, and the
+          // fill grows between them as the value moves toward the target.
+          track = '<span class="goal-scale">' +
+            '<span class="goal-track"><span class="goal-fill" data-w="' + info.pct + '"></span></span>' +
+            '<span class="goal-ends">' +
+            '<span>' + esc(fmt1(info.fromBase(info.start)) + ' ' + info.g.unit) + '</span>' +
+            '<span>' + esc(fmt1(info.fromBase(info.targetBase)) + ' ' + info.g.unit) + '</span>' +
+            '</span>' +
+            '</span>';
+        }
+        rows.push(goalRowHTML(cfg.label, val, info.pct, info.pct >= 100, track));
       }
     });
     if (!rows.length) return '';
