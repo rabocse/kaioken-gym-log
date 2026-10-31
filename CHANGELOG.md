@@ -1,11 +1,42 @@
 # Changelog
 
 All notable changes to Kaioken are documented here. Versions follow
-[semver](https://semver.org/). The version lives in two places that are
-bumped together on release: `APP_VERSION` (js/app.js, shown in Settings)
-and the manifest (manifest.webmanifest). The service worker derives its
-cache name from the manifest's version on install, so the cache can never
-drift from the app. Each release is tagged on main (`v1.1.0`, ...).
+[semver](https://semver.org/). The version lives in three places that are
+bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
+`VERSION` (sw.js, names the cache) and the manifest
+(manifest.webmanifest). No file's version is ever read over the network,
+so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
+if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
+
+## [1.9.1] - 2026-10-31
+
+### Fixed
+- Cold starts no longer wait on the network. The service worker serves the
+  cached shell instantly and refreshes it in the background
+  (stale-while-revalidate) instead of network-first with no timeout race,
+  which could hang for tens of seconds on weak signal or behind a captive
+  portal before falling back to cache — over a blank screen.
+- Deploys can no longer pin stale code through the HTTP cache. The cache
+  name is a constant in `sw.js` rather than a manifest fetched at install
+  (GitHub Pages serves the manifest with `max-age=600`), and precaching
+  bypasses the HTTP cache, so a new release always installs its own bytes.
+- Workout durations are measured on a monotonic clock anchored at boot, so
+  an NTP correction or timezone jump mid-workout no longer distorts elapsed
+  time, the finish-sheet duration or the rest timer.
+
+### Changed
+- `img/background.jpg` (the largest asset, unused at the default `off`
+  background) is no longer precached; the runtime handler caches it the
+  first time the texture background is enabled.
+- Cache reads and writes use exact URLs: query-string requests are passed
+  through uncached, so variants cannot grow the cache without bound.
+
+### Hardening
+- The manifest declares an explicit `id` (`./`), so the app's PWA identity
+  does not follow a future `start_url` change.
+- The dev server sends `X-Content-Type-Options: nosniff` and the page CSP
+  as a response header for HTML, relevant when bound beyond loopback with
+  `-addr :8080`.
 
 ## [1.9.0] - 2026-10-29
 
