@@ -45,8 +45,18 @@ No App Store, no account, no server — your data stays on your phone.
 - Pin any chart to Home from its options sheet: it stays interactive
   there, its options sheet edits and persists the pin, and tapping its
   title opens Stats on that graph
-- Every home section (calendar, pinned chart, New Routine, Active,
-  Scheduled, History) is hold-and-drag reorderable; the layout persists
+- Goals (Settings): weekly/monthly/yearly workout targets, weekly/monthly
+  creatine/protein day targets (counted per day, not per workout) and a
+  body-weight target with kg/lb — shown as progress bars in a reorderable
+  Home section; the weight goal tracks your latest logged weigh-in from
+  the day the target was set
+- Programs: group routine templates under one name (New Program on Home,
+  or Add to Program from any routine's action sheet); a program card shows
+  its routines, the next one up and a done/total chip for the week, and
+  tapping a routine inside schedules it for today
+- Every home section (calendar, goals, pinned chart, New Routine +
+  New Program, programs, Active, Scheduled, History) is hold-and-drag
+  reorderable; the layout persists
 - Rename, repeat or delete any workout (scheduled, active or past) by holding it (or right-clicking): long-press action sheet — or the ⋯ button in the routine view
 - Share a finished routine as an image highlight: a 1080×1350 card in your
   theme (top sets, PRs, volume) via the system share sheet, with a
@@ -60,7 +70,7 @@ No App Store, no account, no server — your data stays on your phone.
 - Works fully offline (service worker + on-device storage)
 - Strict CSP (no inline styles, no third-party sources) and cross-origin
   embedding is blocked
-- Backup / restore everything as JSON (in Settings)
+- Backup / restore everything (routines, programs, goals) as JSON (in Settings)
 
 ## Run locally (development)
 

@@ -8,6 +8,30 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.11.0] - 2026-10-31
+
+### Added
+- Goals: weekly, monthly and yearly workout targets, weekly and monthly
+  creatine/protein day targets (counted per calendar day, so two workouts
+  on one day count once) and a body-weight target with a kg/lb unit,
+  configured in Settings and shown as progress bars in a reorderable Home
+  section. The weight goal tracks the latest logged weigh-in toward the
+  target, with progress counted from the day the target was last changed.
+- Programs: a named group of routine templates. Create one with New
+  Program on Home or Add to Program in a routine's action sheet; copy
+  routines in from existing ones (re-copying a name replaces its
+  exercises). The Home card shows the program's size, the next routine up
+  and a done/total chip for the current week; tapping a routine inside a
+  program schedules it for today. Long-press renames, duplicates or
+  deletes a program; inside one, long-press moves a routine up or down,
+  renames or removes it. Programs are exported and imported alongside
+  routines with the same duplicate-id and write-then-merge safety.
+
+### Notes
+- Programs live in the settings store: the database schema stays at
+  version 2, so a deployed 1.11.0 can be rolled back with a plain git
+  revert with zero data hazard.
+
 ## [1.10.0] - 2026-10-31
 
 ### Changed
