@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.15.0';
+  const APP_VERSION = '1.16.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -1919,11 +1919,14 @@
     };
     const order = homeOrderOrDefault().filter((id) => secs[id]);
 
+    // The kaioken theme wears its heat on the heading itself: white at
+    // ice, the level color bleeding through as the week's training
+    // accumulates, fully red at Kaio-ken x20 (#v1.16.0).
     $app.innerHTML =
-      '<header class="topbar"><h1>Kaioken</h1>' +
+      '<header class="topbar"><h1' +
       (settings.theme === 'kaioken'
-        ? '<span class="chip heat-chip">' + HEAT_LEVELS[computeHeat()].label + '</span>'
-        : '') +
+        ? ' class="heat-title heat-' + computeHeat() + '"'
+        : '') + '>Kaioken</h1>' +
       '<button class="btn btn-icon" id="act-stats" aria-label="Volume charts">' + I.chart + '</button>' +
       '<button class="btn btn-icon" id="act-settings" aria-label="Settings">' + I.gear + '</button></header>' +
       installHint() +

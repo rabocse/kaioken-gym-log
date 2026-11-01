@@ -8,6 +8,15 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.16.0] - 2026-11-01
+
+### Changed
+- The kaioken theme wears its heat on the heading itself: the "Kaio-ken
+  xN" chip is gone, and the Kaioken title on Home is bigger and fills
+  with a white-to-hot gradient that follows the theme's warming pace -
+  white at ice, the level's color bleeding through the word as the
+  week's finished workouts accumulate, completely red at Kaio-ken x20.
+
 ## [1.15.0] - 2026-11-01
 
 ### Added

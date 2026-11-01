@@ -623,11 +623,22 @@ body.has-rest #app { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   animation: pulse 1.6s infinite;
 }
 .chip-today { background: var(--info-soft); border-color: var(--info-border); color: var(--info-text); }
-.heat-chip {
-  background: var(--accent-soft);
-  border-color: var(--accent-border);
-  color: var(--accent-text);
-  white-space: nowrap;
+/* Kaioken heat title: the heading itself warms up - white at ice, the
+   heat level's color bleeding through the word as the week's training
+   accumulates, completely red at Kaio-ken x20. The stops mirror the
+   HEAT_LEVELS accents, painted by class so the strict CSP holds. */
+.topbar h1.heat-title { font-size: 30px; }
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .topbar h1.heat-title {
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .topbar h1.heat-0 { background-image: linear-gradient(90deg, #e7ecf3, #e7ecf3); }
+  .topbar h1.heat-1 { background-image: linear-gradient(90deg, #e7ecf3 62%, #2dd4bf); }
+  .topbar h1.heat-2 { background-image: linear-gradient(90deg, #e7ecf3 45%, #fbbf24); }
+  .topbar h1.heat-3 { background-image: linear-gradient(90deg, #e7ecf3 25%, #fb923c); }
+  .topbar h1.heat-4 { background-image: linear-gradient(90deg, #f87171, #f87171); }
 }
 .chip-done { background: var(--card2); border-color: var(--border); color: var(--muted); font-variant-numeric: tabular-nums; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
