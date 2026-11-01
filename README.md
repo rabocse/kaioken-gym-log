@@ -31,12 +31,13 @@ No App Store, no account, no server — your data stays on your phone.
   weeks, 3 weeks, month, 3 months, 6 months, Last year, All time) and all
   its options (chart type, style, range) behind one compact button that
   opens a bottom sheet:
-  - Progression: per-exercise **top set weight** per session (heaviest
-    working set, warm-ups excluded), spaced by actual date — Line or Bar,
-    Discrete dots or Continuous curve with area fill
+  - Progression: per-exercise per-session series, spaced by actual date —
+    **top set weight** (heaviest working set, warm-ups excluded) or
+    **total working reps**, Line or Bar, Discrete dots or Continuous
+    curve with area fill
   - Muscles: training volume by muscle group as a **radar chart** (the
     previous equal range overlaid dashed for comparison, ring scale
-    labeled) or the classic heatmap
+    labeled)
   - Volume: weekly (or monthly) totals as stacked bars by muscle group or
     a line/area trend; tap a column or point for the breakdown
   - Every value chart shows a Y axis with round tick labels that rescale

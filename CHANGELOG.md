@@ -8,6 +8,27 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.15.0] - 2026-11-01
+
+### Added
+- Proactive PR hint: with a weight entered and reps still empty, the reps
+  field shows the best reps ever done at exactly that weight as an amber
+  ghost - the number to beat, before typing anything. Same performed-work
+  rules as the record flame, keyed in kilograms so unit switches cannot
+  blur it, refreshing live as the weight changes.
+- Progression charts can plot **total working reps** per session alongside
+  top-set weight (Metric toggle in the options sheet, carried by home
+  pins).
+
+### Changed
+- Every goal is its own home block: workouts, creatine/protein, body
+  weight, waist and body fat are five independently reorderable sections
+  (a pre-1.15.0 layout expands its single Goals entry in place), and the
+  measurement rows just say what is left ("8 kg to go") - the labeled
+  scales and category bands carry the current and target values.
+- The Muscles tab is radar-only: the heatmap view is removed (option, pin
+  path, styles and checks); a pre-1.15.0 heat pin renders the radar.
+
 ## [1.14.0] - 2026-10-31
 
 ### Changed

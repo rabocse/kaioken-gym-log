@@ -571,16 +571,6 @@
       'line mode has no gutter');
 
     await tab('heatmap');
-    // The muscles tab remembers its view; force the heat grid first.
-    click(byId('btn-mus-opts'));
-    await optItem('view:heat');
-    var cells = await until(function () { return qa('.hcell[data-op]').length ? qa('.hcell[data-op]') : null; },
-      8000, 'heat cells');
-    B('stats-heatmap', cells.length >= 4 && qa('.hrow').length >= 3,
-      'cells: ' + cells.length + ' rows: ' + qa('.hrow').length);
-
-    click(byId('btn-mus-opts'));
-    await optItem('view:radar');
     var radar = await until(function () { return q('.radarsvg'); }, 6000, 'radar');
     B('stats-radar', !!radar && qa('.rring').length === 4 && txt(q('.radar-scale')).indexOf('scale 0') !== -1,
       'rings: ' + qa('.rring').length);
@@ -606,17 +596,6 @@
       'height=' + seg.style.height + ' bg=' + seg.style.background);
     var dot = q('.bd-dot[data-cat]');
     B('csp-dot-painted', !!dot && !!dot.style.background, dot ? dot.style.background : 'missing');
-
-    await tab('heatmap');
-    click(byId('btn-mus-opts'));
-    await optItem('view:heat');
-    var cell = await until(function () { return q('.hcell[data-op]'); }, 8000, 'heat cell');
-    B('csp-hcell-painted', !!cell.style.background && cell.style.opacity === cell.dataset.op,
-      'bg=' + cell.style.background + ' op=' + cell.style.opacity + '/' + cell.dataset.op);
-    var cellsBox = q('.hcells[data-cols]');
-    var tracks = getComputedStyle(cellsBox).gridTemplateColumns.split(' ').filter(Boolean);
-    B('csp-hcells-tracks', tracks.length === Number(cellsBox.dataset.cols),
-      'tracks: ' + tracks.length + ' cols: ' + cellsBox.dataset.cols);
 
     await openSettings();
     var sw = q('.sw[data-swatch="accent"]');

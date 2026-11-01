@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.14.0';
+  const APP_VERSION = '1.15.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -547,15 +547,6 @@
   // in style-src, and script-set style properties are outside its scope
   // while style="" attributes in markup are not.
   function paintGeneratedStyles(root) {
-    root.querySelectorAll('.hcell[data-op]').forEach((el) => {
-      const c = GYMLOG_CAT_COLORS[el.dataset.cat];
-      if (!c) return;
-      el.style.background = c;
-      el.style.opacity = el.dataset.op;
-    });
-    root.querySelectorAll('.hcells[data-cols]').forEach((el) => {
-      el.style.gridTemplateColumns = 'repeat(' + el.dataset.cols + ', 1fr)';
-    });
     root.querySelectorAll('.segm[data-h]').forEach((el) => {
       const c = GYMLOG_CAT_COLORS[el.dataset.cat];
       if (!c) return;
@@ -3046,13 +3037,12 @@
   let statsSelKey = null;      // volume tab: selected week/month key
   let statsExSel = null;       // progression tab: selected exercise name
   let statsPointSel = null;    // progression tab: selected point index
-  let statsCellSel = null;     // heatmap tab: { cat, key }
   let statsRange = '1m';       // 1w | 2w | 3w | 1m | 3m | 6m | 1y | all
   let statsExType = 'line';         // progression: line | bar
+  let statsExMetric = 'weight';     // progression: weight | reps
   let statsExMode = 'continuous';   // progression line: discrete | continuous
   let statsVolType = 'line';        // volume: bar | line
   let statsVolMode = 'continuous';   // volume line: discrete | continuous
-  let statsMusView = 'radar';       // muscles: heat | radar
 
   const STATS_RANGES = [
     { id: '1w', label: 'Last week' },
@@ -3065,9 +3055,9 @@
     { id: 'all', label: 'All time' },
   ];
   const EX_TYPES = [{ id: 'line', label: 'Line' }, { id: 'bar', label: 'Bar' }];
+  const EX_METRICS = [{ id: 'weight', label: 'Weight' }, { id: 'reps', label: 'Reps' }];
   const VOL_TYPES = [{ id: 'bar', label: 'Bar' }, { id: 'line', label: 'Line' }];
   const PLOT_MODES = [{ id: 'discrete', label: 'Discrete' }, { id: 'continuous', label: 'Continuous' }];
-  const MUS_VIEWS = [{ id: 'heat', label: 'Heat' }, { id: 'radar', label: 'Radar' }];
 
   // Switching the range invalidates selections keyed to the old buckets.
   function setStatsRange(v) {
@@ -3075,7 +3065,6 @@
     statsRange = v;
     statsSelKey = null;
     statsPointSel = null;
-    statsCellSel = null;
   }
 
   // One compact options button per graph card - the overflow-menu pattern
@@ -3350,15 +3339,17 @@
         const g = byName[key] = byName[key] || { name: nm, sessions: [] };
         g.name = nm;
         let best = null;
+        let totalReps = 0;
         ex.sets.forEach((s) => {
           if (s.warmup) return;
           if (s.reps == null || s.weight == null || s.reps <= 0 || s.weight <= 0) return;
           const wkg = s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1);
+          totalReps += s.reps;
           if (!best || wkg > best.wkg) {
             best = { reps: s.reps, weight: s.weight, unit: ex.unit, wkg: wkg, rdate: r.date, ts: d ? d.getTime() : 0 };
           }
         });
-        if (best) g.sessions.push(best);
+        if (best) g.sessions.push({ reps: best.reps, weight: best.weight, unit: best.unit, wkg: best.wkg, rdate: best.rdate, ts: best.ts, totalReps: totalReps });
       });
     });
     return byName;
@@ -3448,23 +3439,34 @@
       '<select id="sel-ex" class="sel-ex">' + options + '</select>' +
       chartOptsBtn('btn-ex-opts') +
       '</div>' +
-      progressionChartBody(sessions, statsExType, statsExMode, statsPointSel) +
+      progressionChartBody(sessions, statsExType, statsExMode, statsPointSel, statsExMetric) +
       '</div>' +
-      '<p class="hint">Heaviest working-set weight per session (warm-ups excluded), spaced by date. Tap a point or bar to see that session\u2019s top set. Shown in the unit of your latest entry; pounds are converted for display only.</p>';
+      '<p class="hint">' + (statsExMetric === 'reps'
+        ? 'Total working-set reps per session (warm-ups excluded), spaced by date. Tap a point or bar for that session\u2019s totals.'
+        : 'Heaviest working-set weight per session (warm-ups excluded), spaced by date. Tap a point or bar to see that session\u2019s top set. Shown in the unit of your latest entry; pounds are converted for display only.') + '</p>';
   }
 
   // Progression chart + detail line for one exercise's sessions, shared by
   // the stats tab and the home pin; selIdx is the highlighted session.
-  function progressionChartBody(sessions, type, mode, selIdx) {
-    const unit = sessions[sessions.length - 1].unit;
-    const disps = sessions.map((s) => (unit === 'kg' ? s.wkg : s.wkg / LB_TO_KG));
+  function progressionChartBody(sessions, type, mode, selIdx, metric) {
+    const reps = metric === 'reps';
+    const unit = reps ? 'reps' : sessions[sessions.length - 1].unit;
+    const disps = reps
+      ? sessions.map((s) => s.totalReps)
+      : sessions.map((s) => (unit === 'kg' ? s.wkg : s.wkg / LB_TO_KG));
     if (selIdx == null || selIdx < 0 || selIdx >= sessions.length) {
       selIdx = sessions.length - 1;
     }
     const sel = sessions[selIdx];
     return progressionSVG(sessions, disps, unit, type, mode, selIdx) +
-      '<div class="cell-detail">Top set <b>' + fmt1(disps[selIdx]) + ' ' + esc(unit) + '</b>' +
-      ' \u00b7 ' + sel.reps + ' reps \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>';
+      '<div class="cell-detail">' +
+      (reps
+        ? 'Total <b>' + disps[selIdx] + ' reps</b> \u00b7 top set ' +
+          fmt1(sel.unit === 'kg' ? sel.wkg : sel.wkg / LB_TO_KG) + ' ' + esc(sel.unit) +
+          ' \u00d7 ' + sel.reps
+        : 'Top set <b>' + fmt1(disps[selIdx]) + ' ' + esc(unit) + '</b>' +
+          ' \u00b7 ' + sel.reps + ' reps') +
+      ' \u00b7 ' + esc(fmtDay(sel.rdate)) + '</div>';
   }
 
   function progressionSVG(sessions, disps, unit, type, mode, selIdx) {
@@ -3515,6 +3517,9 @@
 
   function exOptsGroups() {
     const gs = [{
+      label: 'Metric',
+      items: EX_METRICS.map((o) => ({ key: 'metric:' + o.id, label: o.label, on: statsExMetric === o.id })),
+    }, {
       label: 'Chart',
       items: EX_TYPES.map((o) => ({ key: 'type:' + o.id, label: o.label, on: statsExType === o.id })),
     }];
@@ -3534,6 +3539,7 @@
     const val = k.slice(kind.length + 1);
     if (kind === 'type') statsExType = val;
     else if (kind === 'mode') statsExMode = val;
+    else if (kind === 'metric') statsExMetric = val;
     else if (kind === 'range') setStatsRange(val);
     else if (kind === 'pin') pinCurrentChart();
     render();
@@ -3569,9 +3575,6 @@
   /* ---- heatmap tab ---- */
 
   function statsMusclesHTML() {
-    const bb = rangeBuckets(statsRange);
-    const buckets = bb.buckets;
-    const monthly = bb.monthly;
     const start = rangeStart(statsRange);
     const prevStart = prevRangeStart(statsRange, start);
     const cur = volumeByCat(start, null);
@@ -3581,103 +3584,10 @@
     if (!any) {
       return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
     }
-    const seg = '<div class="opts-row">' + chartOptsBtn('btn-mus-opts') + '</div>';
-    if (statsMusView === 'radar') {
-      return seg +
-        '<div class="card">' + radarInnerHTML(cur, prev, statsRange) + '</div>' +
-        '<p class="hint">Total volume by muscle group for the selected range (kg-normalized).' +
-        (prev ? ' Solid = selected range, dashed = the ' + rangeWord(statsRange) + ' before it.' : '') + '</p>';
-    }
-    return seg +
-      '<div class="card">' + heatRowsHTML(buckets, monthly, statsCellSel) + '</div>' +
-      '<div class="card"><div class="cell-detail">' +
-      heatDetailHTML(buckets, monthly, statsCellSel) + '</div></div>' +
-      '<p class="hint">Training volume by muscle group per ' +
-      (monthly ? 'month' : 'week (Monday-start)') +
-      ' for the selected range. Darker means more volume (kg-normalized).</p>';
-  }
-
-  function heatRowsHTML(buckets, monthly, cellSel) {
-    const byKey = {};
-    buckets.forEach((w) => { byKey[w.key] = w; });
-
-    const grid = {};
-    completedRoutines().forEach((r) => {
-      const d = routineDate(r);
-      if (!d) return;
-      const w = byKey[bucketKeyFor(monthly, d)];
-      if (!w) return;
-      r.exercises.forEach((ex) => {
-        const cat = gymlogCategoryOf(ex.name);
-        ex.sets.forEach((s) => {
-          const v = setVolumeKg(ex, s);
-          if (v <= 0) return;
-          grid[cat] = grid[cat] || {};
-          grid[cat][w.key] = (grid[cat][w.key] || 0) + v;
-        });
-      });
-    });
-
-    const cats = GYMLOG_CATS.filter((c) => grid[c] && buckets.some((w) => grid[c][w.key]));
-    if (!cats.length) return '<div class="empty">No completed workouts in this range.</div>';
-    let maxCell = 0;
-    cats.forEach((c) => buckets.forEach((w) => {
-      maxCell = Math.max(maxCell, (grid[c] && grid[c][w.key]) || 0);
-    }));
-
-    return cats.map((cat) => {
-      const cells = buckets.map((w) => {
-        const v = (grid[cat] && grid[cat][w.key]) || 0;
-        const sel = cellSel && cellSel.cat === cat && cellSel.key === w.key;
-        const per = monthly ? 'month of ' : 'week of ';
-        if (v <= 0) {
-          return '<button class="hcell' + (sel ? ' sel' : '') + '" type="button" data-cat="' + esc(cat) +
-            '" data-w="' + w.key + '" aria-label="' + esc(cat) + ', ' + per + fmtDay(w.key) + ': no volume"></button>';
-        }
-        const lvl = Math.max(1, Math.min(4, Math.ceil((v / maxCell) * 4)));
-        const op = [0, 0.25, 0.5, 0.75, 1][lvl];
-        return '<button class="hcell' + (sel ? ' sel' : '') + '" type="button" data-cat="' + esc(cat) +
-          '" data-w="' + w.key + '" data-op="' + op + '"' +
-          ' aria-label="' + esc(cat) + ', ' + per + fmtDay(w.key) + ': ' + fmtVol(v) + '"></button>';
-      }).join('');
-      return '<div class="hrow"><span class="hlabel">' + esc(cat) + '</span>' +
-        '<div class="hcells" data-cols="' + buckets.length + '">' + cells + '</div></div>';
-    }).join('');
-  }
-
-  function heatDetailHTML(buckets, monthly, cellSel) {
-    const byKey = {};
-    buckets.forEach((w) => { byKey[w.key] = w; });
-    const grid = {};
-    completedRoutines().forEach((r) => {
-      const d = routineDate(r);
-      if (!d) return;
-      const w = byKey[bucketKeyFor(monthly, d)];
-      if (!w) return;
-      r.exercises.forEach((ex) => {
-        const cat = gymlogCategoryOf(ex.name);
-        ex.sets.forEach((s) => {
-          const v = setVolumeKg(ex, s);
-          if (v <= 0) return;
-          grid[cat] = grid[cat] || {};
-          grid[cat][w.key] = (grid[cat][w.key] || 0) + v;
-        });
-      });
-    });
-    let detail = 'Tap a cell to see that muscle and ' + (monthly ? 'month' : 'week') + '.';
-    if (cellSel) {
-      const cat = cellSel.cat;
-      const v = (grid[cat] && grid[cat][cellSel.key]) || 0;
-      const w = byKey[cellSel.key];
-      const range = w
-        ? (monthly
-          ? w.start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-          : fmtDay(w.key) + ' \u2013 ' + fmtDay(isoKey(new Date(w.start.getFullYear(), w.start.getMonth(), w.start.getDate() + 6))))
-        : '';
-      detail = esc(cat) + ' \u00b7 ' + range +
-        ' \u00b7 <b>' + (v > 0 ? fmtVol(v) : 'no volume') + '</b>';
-    }
-    return detail;
+    return '<div class="opts-row">' + chartOptsBtn('btn-mus-opts') + '</div>' +
+      '<div class="card">' + radarInnerHTML(cur, prev, statsRange) + '</div>' +
+      '<p class="hint">Total volume by muscle group for the selected range (kg-normalized).' +
+      (prev ? ' Solid = selected range, dashed = the ' + rangeWord(statsRange) + ' before it.' : '') + '</p>';
   }
 
   function radarInnerHTML(cur, prev, range) {
@@ -3731,7 +3641,6 @@
 
   function musOptsGroups() {
     return [
-      { label: 'View', items: MUS_VIEWS.map((o) => ({ key: 'view:' + o.id, label: o.label, on: statsMusView === o.id })) },
       rangeOptsGroup(statsRange),
       { label: 'Home', items: [{ key: 'pin', label: 'Pin to Home' }] },
     ];
@@ -3740,20 +3649,13 @@
   function applyMusOpt(k) {
     const kind = k.split(':')[0];
     const val = k.slice(kind.length + 1);
-    if (kind === 'view') statsMusView = val;
-    else if (kind === 'range') setStatsRange(val);
+    if (kind === 'range') setStatsRange(val);
     else if (kind === 'pin') pinCurrentChart();
     render();
   }
 
   function bindMuscles() {
     bindChartOpts('btn-mus-opts', 'Chart options', musOptsGroups, applyMusOpt);
-    $app.querySelectorAll('.hcell').forEach((el) => {
-      el.onclick = () => {
-        statsCellSel = { cat: el.dataset.cat, key: el.dataset.w };
-        render();
-      };
-    });
   }
 
   /* ---- volume tab ---- */
@@ -4307,11 +4209,11 @@
   function pinCurrentChart() {
     settings.homeChart = {
       tab: statsTab, ex: statsExSel,
-      exType: statsExType, exMode: statsExMode,
+      exType: statsExType, exMode: statsExMode, exMetric: statsExMetric,
       volType: statsVolType, volMode: statsVolMode,
-      view: statsMusView, range: statsRange,
+      range: statsRange,
     };
-    homeSel = { point: null, key: null, cell: null };
+    homeSel = { point: null, key: null };
     store.setSetting('homeChart', settings.homeChart)
       .catch((e) => console.error('Kaioken:', e));
     toast('Pinned to Home');
@@ -4345,7 +4247,7 @@
       if (!sessions.length) {
         return '<div class="empty">No sessions in this range.</div>';
       }
-      return progressionChartBody(sessions, cfg.exType, cfg.exMode, homeSel.point);
+      return progressionChartBody(sessions, cfg.exType, cfg.exMode, homeSel.point, cfg.exMetric);
     }
     if (cfg.tab === 'volume') {
       const data = volumeBucketsData(cfg.range);
@@ -4360,20 +4262,19 @@
     const any = GYMLOG_CATS.some((c) =>
       (cur[c] || 0) > 0 || (prev ? (prev[c] || 0) > 0 : false));
     if (!any) return '<div class="empty">No completed workouts in this range.</div>';
-    if (cfg.view === 'radar') return radarInnerHTML(cur, prev, cfg.range);
-    const bb = rangeBuckets(cfg.range);
-    return heatRowsHTML(bb.buckets, bb.monthly, homeSel.cell) +
-      '<div class="cell-detail">' +
-      heatDetailHTML(bb.buckets, bb.monthly, homeSel.cell) + '</div>';
+    // A pre-1.15.0 pin may still say view 'heat': the heatmap is gone,
+    // so every muscles pin renders the radar.
+    return radarInnerHTML(cur, prev, cfg.range);
   }
 
   function homeOptsGroups() {
     const cfg = settings.homeChart;
     if (!cfg) return [];
     const gs = [];
-    if (cfg.tab === 'muscles') {
-      gs.push({ label: 'View', items: MUS_VIEWS.map((o) => ({ key: 'view:' + o.id, label: o.label, on: cfg.view === o.id })) });
-    } else {
+    if (cfg.tab === 'progression') {
+      gs.push({ label: 'Metric', items: EX_METRICS.map((o) => ({ key: 'metric:' + o.id, label: o.label, on: (cfg.exMetric || 'weight') === o.id })) });
+    }
+    if (cfg.tab !== 'muscles') {
       const types = cfg.tab === 'progression' ? EX_TYPES : VOL_TYPES;
       const curType = cfg.tab === 'progression' ? cfg.exType : cfg.volType;
       gs.push({ label: 'Chart', items: types.map((o) => ({ key: 'type:' + o.id, label: o.label, on: curType === o.id })) });
@@ -4394,7 +4295,7 @@
     const val = k.slice(kind.length + 1);
     if (kind === 'unpin') {
       settings.homeChart = null;
-      homeSel = { point: null, key: null, cell: null };
+      homeSel = { point: null, key: null };
       store.setSetting('homeChart', null)
         .catch((e) => console.error('Kaioken:', e));
       toast('Removed from Home');
@@ -4407,10 +4308,11 @@
     } else if (kind === 'mode') {
       if (cfg.tab === 'progression') cfg.exMode = val;
       else cfg.volMode = val;
-    } else if (kind === 'view') cfg.view = val;
-    else if (kind === 'range') {
+    } else if (kind === 'metric') {
+      if (cfg.tab === 'progression') cfg.exMetric = val;
+    } else if (kind === 'range') {
       cfg.range = val;
-      homeSel = { point: null, key: null, cell: null };
+      homeSel = { point: null, key: null };
     }
     store.setSetting('homeChart', cfg).catch((e) => console.error('Kaioken:', e));
     render();
@@ -4425,13 +4327,12 @@
       if (cfg.ex) statsExSel = cfg.ex;
       if (cfg.exType) statsExType = cfg.exType;
       if (cfg.exMode) statsExMode = cfg.exMode;
+      if (cfg.exMetric) statsExMetric = cfg.exMetric;
       if (cfg.volType) statsVolType = cfg.volType;
       if (cfg.volMode) statsVolMode = cfg.volMode;
-      if (cfg.view) statsMusView = cfg.view;
       statsRange = cfg.range || '1m';
       statsSelKey = null;
       statsPointSel = null;
-      statsCellSel = null;
       go('stats');
     };
     bindChartOpts('btn-home-opts', 'Chart options', homeOptsGroups, applyHomeOpt);
@@ -4444,13 +4345,6 @@
       $app.querySelectorAll('.home-chart .col, .home-chart .vpt').forEach((el) => {
         el.onclick = () => { homeSel.key = el.dataset.w; render(); };
         if (el.classList.contains('vpt')) keyActivatable(el);
-      });
-    } else {
-      $app.querySelectorAll('.home-chart .hcell').forEach((el) => {
-        el.onclick = () => {
-          homeSel.cell = { cat: el.dataset.cat, key: el.dataset.w };
-          render();
-        };
       });
     }
   }

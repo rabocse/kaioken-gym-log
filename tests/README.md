@@ -31,7 +31,7 @@ Set `KAIOKEN_HEADED=1` to watch the browser.
 Phases share one session in order, so a crash in one phase usually shows up
 as cascading failures in the next. Read the first `FAIL` line.
 
-## What is covered (92 checks)
+## What is covered (89 checks)
 
 | Phase | Area |
 |---|---|
@@ -41,8 +41,8 @@ as cascading failures in the next. Read the first `FAIL` line.
 | 4 | finish sheet, body weight/supps, IndexedDB persistence across reload |
 | 5 | export shape, settings version line vs manifest version, import merge, bad JSON, duplicate ids |
 | 6 | action sheet, gesture lock, Escape, Tab trap, rename, duplicate, delete |
-| 7 | stats tabs, exercise selector, bar mode, volume gutter, heatmap, radar |
-| 8 | CSP meta + zero violations, CSSOM-painted data attributes (`.segm`, `.bd-dot`, `.hcell`, theme swatches, grid tracks) |
+| 7 | stats tabs, exercise selector, bar mode, volume gutter, radar |
+| 8 | CSP meta + zero violations, CSSOM-painted data attributes (`.segm`, `.bd-dot`, theme swatches) |
 | 9 | chart y-axis ticks/gridlines/unit, rescale on exercise switch, bar-gutter alignment and scaling, range change |
 | 10 | share button gating, 1080×1350 PNG, canvas pixels, copy, Escape, scheduled routines excluded |
 | 11 | same-origin framing allowed, no errors at exit |

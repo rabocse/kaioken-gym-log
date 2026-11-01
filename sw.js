@@ -13,7 +13,7 @@
 // together: VERSION here, APP_VERSION (js/app.js) and the version in
 // manifest.webmanifest. `npm run verify` fails if they drift apart.
 
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
 const CACHE = 'kaioken-' + VERSION;
 const ASSETS = [
   './',
