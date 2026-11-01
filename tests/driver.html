@@ -682,6 +682,14 @@
     var colsAfter = await until(function () { return qa('.col').length; }, 8000, 'columns after range change');
     B('chart-range-change', colsAfter > 0, 'cols ' + colsBefore + ' -> ' + colsAfter);
 
+    // Date-proof selection: run on the 1st of a month and the newest
+    // monthly bucket holds only today's single-category workout, so the
+    // auto-selected bucket can carry a single row. Click a column with a
+    // multi-category stack instead - which also exercises the
+    // tap-to-select path this check was written to cover.
+    var multiCol = qa('.col').filter(function (c) { return qa('.segm', c).length >= 2; })[0];
+    click(multiCol);
+    await until(function () { return qa('.bd-row').length >= 2; }, 8000, 'breakdown rows');
     var bdRows = qa('.bd-row').length;
     B('chart-breakdown', bdRows >= 2 && qa('.bd-dot').length === bdRows, 'breakdown rows: ' + bdRows);
 
