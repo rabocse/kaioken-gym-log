@@ -1660,69 +1660,88 @@
       '</div>';
   }
 
-  function goalsHTML() {
+  // Every goal metric is its own home section (#70): the user arranges
+  // the blocks they actually use. The two multi-row blocks (workouts,
+  // creatine/protein) carry a section label; the single-goal blocks let
+  // the row label speak for itself.
+  function goalWorkoutsHTML() {
     const g = settings.goals;
-    if (!g) return '';
-    ensureMeasurementStarts();
+    if (!g || !g.workouts) return '';
     const rows = [];
     const periods = [['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly']];
-    if (g.workouts) {
-      periods.forEach((p) => {
-        const t = g.workouts[p[0]];
-        if (!(t > 0)) return;
-        const w = goalWindow(p[0]);
-        const n = completedInRange(w[0], w[1]).length;
-        const pct = Math.min(100, Math.round(100 * n / t));
-        rows.push(goalRowHTML(p[1] + ' workouts', n + '/' + t + ' \u00b7 ' + pct + '%', pct, n >= t));
-      });
-    }
-    if (g.supps) {
-      periods.slice(0, 2).forEach((p) => {
-        const t = g.supps[p[0]];
-        if (!(t > 0)) return;
-        const w = goalWindow(p[0]);
-        const n = suppsDaysInRange(completedInRange(w[0], w[1]));
-        const pct = Math.min(100, Math.round(100 * n / t));
-        rows.push(goalRowHTML(p[1] + ' creatine/protein', n + '/' + t + ' \u00b7 ' + pct + '%', pct, n >= t));
-      });
-    }
-    MEAS_GOALS.forEach((cfg) => {
-      const info = measureGoalInfo(cfg);
-      if (!info) return;
-      if (info.empty) {
-        rows.push('<div class="goal-row"><span class="goal-top">' +
-          '<span class="goal-label">' + cfg.label + '</span>' +
-          '<span class="goal-val muted-small">' + cfg.hint + '</span>' +
-          '</span></div>');
-      } else {
-        const us = cfg.alt ? ' ' + info.g.unit : '%';
-        const val = info.pct >= 100
-          ? fmt1(info.fromBase(info.targetBase)) + us + ' reached'
-          : fmt1(info.fromBase(info.current)) + ' \u2192 ' + fmt1(info.fromBase(info.targetBase)) + us +
-            ' \u00b7 ' + info.pct + '% \u00b7 ' +
-            fmt1(info.fromBase(Math.abs(info.current - info.targetBase))) + ' to go';
-        let track = null;
-        if (cfg.key === 'bf') {
-          const female = (settings.bodyProfile && settings.bodyProfile.sex) === 'f';
-          track = bfScaleHTML(info.current, info.targetBase, female);
-        } else {
-          // A labeled scale: the weight/waist when the target was set
-          // anchors the 0% end, the target anchors the 100% end, and the
-          // fill grows between them as the value moves toward the target.
-          track = '<span class="goal-scale">' +
-            '<span class="goal-track"><span class="goal-fill" data-w="' + info.pct + '"></span></span>' +
-            '<span class="goal-ends">' +
-            '<span>' + esc(fmt1(info.fromBase(info.start)) + ' ' + info.g.unit) + '</span>' +
-            '<span>' + esc(fmt1(info.fromBase(info.targetBase)) + ' ' + info.g.unit) + '</span>' +
-            '</span>' +
-            '</span>';
-        }
-        rows.push(goalRowHTML(cfg.label, val, info.pct, info.pct >= 100, track));
-      }
+    periods.forEach((p) => {
+      const t = g.workouts[p[0]];
+      if (!(t > 0)) return;
+      const w = goalWindow(p[0]);
+      const n = completedInRange(w[0], w[1]).length;
+      const pct = Math.min(100, Math.round(100 * n / t));
+      rows.push(goalRowHTML(p[1] + ' workouts', n + '/' + t + ' \u00b7 ' + pct + '%', pct, n >= t));
     });
     if (!rows.length) return '';
-    return '<div class="section-label">Goals</div>' +
+    return '<div class="section-label">Workout goals</div>' +
       '<div class="card goal-card">' + rows.join('') + '</div>';
+  }
+
+  function goalSuppsHTML() {
+    const g = settings.goals;
+    if (!g || !g.supps) return '';
+    const rows = [];
+    [['week', 'Weekly'], ['month', 'Monthly']].forEach((p) => {
+      const t = g.supps[p[0]];
+      if (!(t > 0)) return;
+      const w = goalWindow(p[0]);
+      const n = suppsDaysInRange(completedInRange(w[0], w[1]));
+      const pct = Math.min(100, Math.round(100 * n / t));
+      rows.push(goalRowHTML(p[1] + ' creatine/protein', n + '/' + t + ' \u00b7 ' + pct + '%', pct, n >= t));
+    });
+    if (!rows.length) return '';
+    return '<div class="section-label">Creatine / protein goals</div>' +
+      '<div class="card goal-card">' + rows.join('') + '</div>';
+  }
+
+  function measGoalRowHTML(cfg) {
+    ensureMeasurementStarts();
+    const info = measureGoalInfo(cfg);
+    if (!info) return '';
+    if (info.empty) {
+      return '<div class="goal-row"><span class="goal-top">' +
+        '<span class="goal-label">' + cfg.label + '</span>' +
+        '<span class="goal-val muted-small">' + cfg.hint + '</span>' +
+        '</span></div>';
+    }
+    // The header no longer spells out current -> target; the bar's
+    // labeled scale (or the category bands and markers) carries those,
+    // and the row text just says what is left.
+    const us = cfg.alt ? ' ' + info.g.unit : '%';
+    const val = info.pct >= 100
+      ? fmt1(info.fromBase(info.targetBase)) + us + ' reached'
+      : fmt1(info.fromBase(Math.abs(info.current - info.targetBase))) + us + ' to go';
+    let track = null;
+    if (cfg.key === 'bf') {
+      const female = (settings.bodyProfile && settings.bodyProfile.sex) === 'f';
+      track = bfScaleHTML(info.current, info.targetBase, female);
+    } else {
+      // A labeled scale: the weight/waist when the target was set
+      // anchors the 0% end, the target anchors the 100% end, and the
+      // fill grows between them as the value moves toward the target.
+      track = '<span class="goal-scale">' +
+        '<span class="goal-track"><span class="goal-fill" data-w="' + info.pct + '"></span></span>' +
+        '<span class="goal-ends">' +
+        '<span>' + esc(fmt1(info.fromBase(info.start)) + ' ' + info.g.unit) + '</span>' +
+        '<span>' + esc(fmt1(info.fromBase(info.targetBase)) + ' ' + info.g.unit) + '</span>' +
+        '</span>' +
+        '</span>';
+    }
+    return goalRowHTML(cfg.label, val, info.pct, info.pct >= 100, track);
+  }
+
+  function goalMeasSectionHTML(key) {
+    if (!settings.goals || !settings.goals[key]) return '';
+    const cfg = MEAS_GOALS.find((c) => c.key === key);
+    if (!cfg) return '';
+    const row = measGoalRowHTML(cfg);
+    if (!row) return '';
+    return '<div class="card goal-card">' + row + '</div>';
   }
 
   /* ---------- home ---------- */
@@ -1894,7 +1913,11 @@
     // history block; the order persists in the settings store.
     const secs = {
       cal: calHTML,
-      goals: goalsHTML(),
+      'goal-wo': goalWorkoutsHTML(),
+      'goal-su': goalSuppsHTML(),
+      'goal-wt': goalMeasSectionHTML('weight'),
+      'goal-wa': goalMeasSectionHTML('waist'),
+      'goal-bf': goalMeasSectionHTML('bf'),
       chart: settings.homeChart ? homeChartHTML() : '',
       new: '<button class="btn btn-primary btn-block btn-new" id="act-new">' + I.plus + '<span>New Routine</span></button>' +
         '<button class="btn btn-ghost btn-block btn-new-prog" id="act-new-program" type="button">' + I.plus + '<span>New Program</span></button>',
@@ -4217,8 +4240,17 @@
   // sections that appeared later (or were never saved) keep their default
   // spot at the end.
   function homeOrderOrDefault() {
-    const all = ['cal', 'goals', 'chart', 'new', 'programs', 'active', 'scheduled', 'history'];
-    const saved = Array.isArray(settings.homeOrder) ? settings.homeOrder : [];
+    const all = ['cal', 'goal-wo', 'goal-su', 'goal-wt', 'goal-wa', 'goal-bf',
+      'chart', 'new', 'programs', 'active', 'scheduled', 'history'];
+    // A pre-1.15.0 order saved the goals as one block: expand it in place
+    // so the five blocks inherit its position instead of dropping to the
+    // end.
+    const saved = (Array.isArray(settings.homeOrder) ? settings.homeOrder : [])
+      .reduce((acc, id) => {
+        if (id === 'goals') acc.push('goal-wo', 'goal-su', 'goal-wt', 'goal-wa', 'goal-bf');
+        else acc.push(id);
+        return acc;
+      }, []);
     const out = saved.filter((id) => all.indexOf(id) !== -1);
     all.forEach((id) => { if (out.indexOf(id) === -1) out.push(id); });
     return out;
