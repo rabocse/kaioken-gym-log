@@ -2147,6 +2147,10 @@
       let b1 = 0;
       let b2 = 0;
       let s1 = null;
+      // Best reps ever done at each exact weight (#71), in kilograms so a
+      // unit change cannot make two different loads look alike. Built in
+      // the same scan, under the same performed-work rules.
+      const byWeight = new Map();
       routines.forEach((r) => {
         // Personal records are performed work only (#37): typing planned
         // weights into a never-started (scheduled) routine used to raise
@@ -2165,12 +2169,27 @@
           // or the tie strips the flame from every set including the
           // standing best.
           else if (e > b2 && e < b1 - 1e-9) { b2 = e; }
+          if (s.reps != null && s.weight != null) {
+            const wk = Math.round(s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1) * 1000);
+            if (byWeight.get(wk) == null || s.reps > byWeight.get(wk)) byWeight.set(wk, s.reps);
+          }
         });
         });
       });
-      bestEpleyCache.set(key, { b1: b1, b2: b2, s1: s1 });
+      bestEpleyCache.set(key, { b1: b1, b2: b2, s1: s1, byWeight: byWeight });
     }
     return bestEpleyCache.get(key);
+  }
+
+  // The proactive PR hint (#71): the best reps ever done at exactly this
+  // weight, ghosted into an empty reps field so the user can chase it
+  // before typing. Rides the epley cache (same rules, same invalidation).
+  function bestRepsAtWeight(name, wkg) {
+    if (wkg == null || !(wkg > 0)) return null;
+    const top = bestEpleyTop(name);
+    if (!top) return null;
+    const reps = top.byWeight.get(Math.round(wkg * 1000));
+    return reps != null ? reps : null;
   }
 
   function bestEpleyByName(name, excludeSet) {
@@ -2277,6 +2296,15 @@
         check = '<span class="set-check off' + (pr ? ' pr' : '') + (warmup ? ' warm' : '') + '">' +
           (pr ? I.flame : (s.done ? I.check : (warmup ? I.thermo : workN))) + '</span>';
       }
+      // Proactive PR hint (#71): with a weight entered and reps still
+      // empty, ghost the best reps ever done at exactly that weight into
+      // the reps field - amber, gone the moment the user types a number.
+      let repsCls = 'in-reps';
+      let repsPh = 'reps';
+      if (!cardio && !warmup && s.weight != null && s.reps == null) {
+        const ghost = bestRepsAtWeight(ex.name, s.weight * (ex.unit === 'lb' ? LB_TO_KG : 1));
+        if (ghost != null) { repsCls += ' pr-hint'; repsPh = String(ghost); }
+      }
       const fields = cardio
         ? '<input class="in-mins" type="text" inputmode="decimal" autocomplete="off" placeholder="min" value="' + (s.mins == null ? '' : s.mins) + '">' +
           '<span class="unit-tag min-tag">min</span>' +
@@ -2286,7 +2314,7 @@
           // text + inputmode="decimal" always shows it.
           '<input class="in-weight" type="text" inputmode="decimal" autocomplete="off" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
           '<span class="unit-tag">' + esc(ex.unit) + '</span>' +
-          '<input class="in-reps" type="number" inputmode="numeric" min="0" step="1" placeholder="reps" value="' + (s.reps == null ? '' : s.reps) + '">' +
+          '<input class="' + repsCls + '" type="number" inputmode="numeric" min="0" step="1" placeholder="' + repsPh + '" value="' + (s.reps == null ? '' : s.reps) + '">' +
           '<span class="unit-tag reps-tag">reps</span>';
       return '<div class="set-row' + (cardio ? ' cardio' : '') + (s.done ? ' done' : '') + (pr ? ' pr' : '') + '" data-sid="' + esc(s.id) + '">' +
         check + fields +
@@ -2892,21 +2920,40 @@
         } else {
           const repsIn = row.querySelector('.in-reps');
           const wtIn = row.querySelector('.in-weight');
+          // Refresh the PR ghost (#71) as the weight changes or the reps
+          // field empties, after applyCardPR has dropped the cached scan
+          // for this exercise so the hint reflects the edits.
+          const refreshPRGhost = () => {
+            const w = numOrNull(wtIn.value);
+            const ghost = (w != null && w > 0 && numOrNull(repsIn.value) == null)
+              ? bestRepsAtWeight(ex.name, w * (ex.unit === 'lb' ? LB_TO_KG : 1))
+              : null;
+            if (ghost != null) {
+              repsIn.classList.add('pr-hint');
+              repsIn.placeholder = String(ghost);
+            } else {
+              repsIn.classList.remove('pr-hint');
+              repsIn.placeholder = 'reps';
+            }
+          };
           repsIn.addEventListener('input', () => {
             set.reps = numOrNull(repsIn.value);
             scheduleSave(r);
             applyCardPR();
             updateExStats();
+            refreshPRGhost();
           });
           wtIn.addEventListener('input', () => {
             set.weight = numOrNull(wtIn.value);
             scheduleSave(r);
             applyCardPR();
             updateExStats();
+            refreshPRGhost();
           });
           wtIn.addEventListener('blur', () => {
             const n = numOrNull(wtIn.value);
             wtIn.value = n == null ? '' : String(n);
+            refreshPRGhost();
           });
         }
         row.querySelector('.btn-del-set').onclick = () => {
