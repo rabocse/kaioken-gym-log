@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.16.0';
+  const APP_VERSION = '1.16.1';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -98,7 +98,7 @@
         .then((row) => (row && row.value !== undefined ? row.value : fallback)),
     setSetting: (key, value) =>
       withStore('settings', 'readwrite', (s) => s.put({ key: key, value: value })),
-  };
+  }
 
   /* ---------- helpers ---------- */
   const $app = document.getElementById('app');
@@ -130,7 +130,7 @@
     const n = parseFloat(t.replace(',', '.'));
     if (!Number.isFinite(n) || n < 0) return null;
     return n;
-  };
+  }
 
   // A real calendar date in YYYY-MM-DD form: the Date constructor rolls
   // impossible dates over (2024-02-31 becomes Mar 2), which left display,
@@ -141,7 +141,7 @@
     const p = s.split('-').map(Number);
     const d = new Date(p[0], p[1] - 1, p[2]);
     return d.getFullYear() === p[0] && d.getMonth() === p[1] - 1 && d.getDate() === p[2];
-  };
+  }
 
   function todayISO() {
     const d = new Date();
@@ -206,7 +206,7 @@
     down: '<svg ' + A + '><path d="M6 9l6 6 6-6"/></svg>',
     dots: '<svg ' + A + '><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>',
     share: '<svg ' + A + '><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
-  };
+  }
 
   /* ---------- autocomplete suggestions ---------- */
   const ROUTINE_NAMES = ['Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Lower Body', 'Full Body'];
@@ -286,7 +286,7 @@
     ruby: { label: 'Ruby', bg: '#151012', card: '#1d1518', accent: '#fb7185', meta: '#151012' },
     light: { label: 'Light', bg: '#f4f6f8', card: '#ffffff', accent: '#0d9488', meta: '#f4f6f8' },
     paper: { label: 'Paper', bg: '#f7f2ea', card: '#fffdf8', accent: '#b45309', meta: '#f7f2ea' },
-  };
+  }
 
   function applyTheme(id) {
     if (!THEMES[id]) id = 'dark';
@@ -588,6 +588,7 @@
     document.body.classList.remove('has-bar2');
     closeSheet();
     syncHeat();
+    harvestSettingsInputs();
     switch (view.name) {
       case 'new': renderNew(); break;
       case 'routine': renderRoutine(); break;
@@ -1610,7 +1611,7 @@
       { name: 'Average', from: 25, cls: 'bf-average' },
       { name: 'Obese', from: 32, cls: 'bf-obese' },
     ] },
-  };
+  }
 
   function bfScaleHTML(current, target, female) {
     const cfg = female ? BF_CATS.f : BF_CATS.m;
@@ -2207,7 +2208,7 @@
     if (s === top.s1) return e > top.b2 + 1e-9;
     if (e > top.b1 + 1e-9) return true;
     return Math.abs(e - top.b1) <= 1e-9 && top.b1 > top.b2 + 1e-9;
-  };
+  }
 
   function workSetNumber(sets, idx) {
     if (sets[idx].warmup) return null;
@@ -4759,6 +4760,114 @@
       '</div>';
   }
 
+  // ---- Settings input savers (module scope so the render-time
+  // harvest below can commit typed values before the DOM is torn
+  // down) ----
+  function saveProfileFromInputs() {
+    const prof = settings.bodyProfile || defaultBodyProfile();
+    const readLen = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const n = toNum(el.value);
+      return (n != null && n > 0) ? n * (goalUnits.waist === 'in' ? IN_TO_CM : 1) : null;
+    };
+    const wEl = document.getElementById('bp-weight');
+    let w = null;
+    if (wEl) {
+      const n = toNum(wEl.value);
+      w = (n != null && n > 0) ? n * (goalUnits.weight === 'lb' ? LB_TO_KG : 1) : null;
+    }
+    prof.height = readLen('bp-height');
+    prof.weight = w;
+    prof.neck = readLen('bp-neck');
+    prof.waist = readLen('bp-waist');
+    if (document.getElementById('bp-hip')) prof.hip = readLen('bp-hip');
+    settings.bodyProfile = prof;
+    store.setSetting('bodyProfile', prof)
+      .catch((e) => console.error('Kaioken: setting save failed', e));
+    const bfEl = document.getElementById('bp-bf');
+    if (bfEl) bfEl.innerHTML = bodyFatReadoutHTML();
+  }
+
+  function gfInt(id) {
+    const el = document.getElementById(id);
+    if (!el) return 0;
+    const n = Math.floor(toNum(el.value) || 0);
+    return (isFinite(n) && n > 0) ? n : 0;
+  }
+  function saveGoals() {
+    const raw = {};
+    const wo = { week: gfInt('gf-wo-week'), month: gfInt('gf-wo-month'), year: gfInt('gf-wo-year') };
+    if (wo.week || wo.month || wo.year) raw.workouts = wo;
+    const su = { week: gfInt('gf-su-week'), month: gfInt('gf-su-month') };
+    if (su.week || su.month) raw.supps = su;
+    const measRaw = (inputId, key, alt, factor) => {
+      const el = document.getElementById(inputId);
+      const t = el ? toNum(el.value) : null;
+      if (t == null || !(t > 0)) return;
+      let since = todayISO();
+      let start = null;
+      let preserved = false;
+      const prev = settings.goals && settings.goals[key];
+      if (prev) {
+        // The previous target expressed in the newly picked unit: an
+        // unchanged target keeps its progress reference. Unit toggles
+        // convert with 2-decimal rounding, so the comparison tolerates
+        // a sub-0.25 nudge - a round trip through the other unit must
+        // not count as changing the target.
+        const prevInNewUnit = prev.unit === goalUnits[key]
+          ? prev.target
+          : (prev.unit === alt ? prev.target * factor : prev.target / factor);
+        if (Math.abs(prevInNewUnit - t) < 0.25) {
+          since = prev.since;
+          const ps = toNum(prev.start);
+          start = (ps != null && ps > 0) ? ps : null;
+          preserved = true;
+        }
+      }
+      if (!preserved) {
+        const cfg = MEAS_GOALS.find((c) => c.key === key);
+        start = cfg ? currentMeasure(cfg) : null;
+      }
+      return { target: t, unit: goalUnits[key], since: since, start: start };
+    };
+    const wt = measRaw('gf-wt', 'weight', 'lb', LB_TO_KG);
+    if (wt) raw.weight = wt;
+    const wa = measRaw('gf-wa', 'waist', 'in', IN_TO_CM);
+    if (wa) raw.waist = wa;
+    const bfEl = document.getElementById('gf-bf');
+    const bt = bfEl ? toNum(bfEl.value) : null;
+    if (bt != null && bt > 0 && bt < 100) {
+      const prev = settings.goals && settings.goals.bf;
+      const preserved = prev && Math.abs(prev.target - bt) < 0.05;
+      let start = null;
+      if (preserved) {
+        const ps = toNum(prev.start);
+        start = (ps != null && ps > 0) ? ps : null;
+      } else {
+        start = navyBodyFat(settings.bodyProfile);
+      }
+      raw.bf = { target: bt, since: preserved ? prev.since : todayISO(), start: start };
+    }
+    settings.goals = sanitizeGoals(raw);
+    store.setSetting('goals', settings.goals)
+      .catch((e) => console.error('Kaioken: setting save failed', e));
+  }
+
+  // Mobile Safari can drop an input's change event when navigation
+  // replaces the DOM while the field is still focused - the keyboard's
+  // Done never blurs, and a tap can run the button's handler before the
+  // change dispatches - so an edited weight or goal target silently
+  // reverted on the phone while working everywhere else. Harvest the
+  // Settings inputs before any re-render destroys them: reading the
+  // typed values straight from the DOM commits them no matter how the
+  // user leaves the view.
+  function harvestSettingsInputs() {
+    if (!document.getElementById('gf-wt')) return;
+    saveProfileFromInputs();
+    saveGoals();
+  }
+
   function renderSettings() {
     const restOptions = [
       { secs: 60, label: '1 min' },
@@ -4911,31 +5020,6 @@
     // Body composition (#v1.13.0): fields save on change (display units
     // convert to the base units the profile stores); the readout updates
     // in place. Finishing a workout writes the prompted metrics here.
-    const saveProfileFromInputs = () => {
-      const prof = settings.bodyProfile || defaultBodyProfile();
-      const readLen = (id) => {
-        const el = document.getElementById(id);
-        if (!el) return null;
-        const n = toNum(el.value);
-        return (n != null && n > 0) ? n * (goalUnits.waist === 'in' ? IN_TO_CM : 1) : null;
-      };
-      const wEl = document.getElementById('bp-weight');
-      let w = null;
-      if (wEl) {
-        const n = toNum(wEl.value);
-        w = (n != null && n > 0) ? n * (goalUnits.weight === 'lb' ? LB_TO_KG : 1) : null;
-      }
-      prof.height = readLen('bp-height');
-      prof.weight = w;
-      prof.neck = readLen('bp-neck');
-      prof.waist = readLen('bp-waist');
-      if (document.getElementById('bp-hip')) prof.hip = readLen('bp-hip');
-      settings.bodyProfile = prof;
-      store.setSetting('bodyProfile', prof)
-        .catch((e) => console.error('Kaioken: setting save failed', e));
-      const bfEl = document.getElementById('bp-bf');
-      if (bfEl) bfEl.innerHTML = bodyFatReadoutHTML();
-    };
     ['bp-height', 'bp-weight', 'bp-neck', 'bp-waist', 'bp-hip'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', saveProfileFromInputs);
@@ -4970,70 +5054,6 @@
     // off. Changing a measurement target re-stamps `since` and snapshots
     // the current value as the progress reference; an unchanged target
     // (re-saved or round-tripped through a unit toggle) keeps both.
-    const gfInt = (id) => {
-      const el = document.getElementById(id);
-      if (!el) return 0;
-      const n = Math.floor(toNum(el.value) || 0);
-      return (isFinite(n) && n > 0) ? n : 0;
-    };
-    const saveGoals = () => {
-      const raw = {};
-      const wo = { week: gfInt('gf-wo-week'), month: gfInt('gf-wo-month'), year: gfInt('gf-wo-year') };
-      if (wo.week || wo.month || wo.year) raw.workouts = wo;
-      const su = { week: gfInt('gf-su-week'), month: gfInt('gf-su-month') };
-      if (su.week || su.month) raw.supps = su;
-      const measRaw = (inputId, key, alt, factor) => {
-        const el = document.getElementById(inputId);
-        const t = el ? toNum(el.value) : null;
-        if (t == null || !(t > 0)) return;
-        let since = todayISO();
-        let start = null;
-        let preserved = false;
-        const prev = settings.goals && settings.goals[key];
-        if (prev) {
-          // The previous target expressed in the newly picked unit: an
-          // unchanged target keeps its progress reference. Unit toggles
-          // convert with 2-decimal rounding, so the comparison tolerates
-          // a sub-0.25 nudge - a round trip through the other unit must
-          // not count as changing the target.
-          const prevInNewUnit = prev.unit === goalUnits[key]
-            ? prev.target
-            : (prev.unit === alt ? prev.target * factor : prev.target / factor);
-          if (Math.abs(prevInNewUnit - t) < 0.25) {
-            since = prev.since;
-            const ps = toNum(prev.start);
-            start = (ps != null && ps > 0) ? ps : null;
-            preserved = true;
-          }
-        }
-        if (!preserved) {
-          const cfg = MEAS_GOALS.find((c) => c.key === key);
-          start = cfg ? currentMeasure(cfg) : null;
-        }
-        return { target: t, unit: goalUnits[key], since: since, start: start };
-      };
-      const wt = measRaw('gf-wt', 'weight', 'lb', LB_TO_KG);
-      if (wt) raw.weight = wt;
-      const wa = measRaw('gf-wa', 'waist', 'in', IN_TO_CM);
-      if (wa) raw.waist = wa;
-      const bfEl = document.getElementById('gf-bf');
-      const bt = bfEl ? toNum(bfEl.value) : null;
-      if (bt != null && bt > 0 && bt < 100) {
-        const prev = settings.goals && settings.goals.bf;
-        const preserved = prev && Math.abs(prev.target - bt) < 0.05;
-        let start = null;
-        if (preserved) {
-          const ps = toNum(prev.start);
-          start = (ps != null && ps > 0) ? ps : null;
-        } else {
-          start = navyBodyFat(settings.bodyProfile);
-        }
-        raw.bf = { target: bt, since: preserved ? prev.since : todayISO(), start: start };
-      }
-      settings.goals = sanitizeGoals(raw);
-      store.setSetting('goals', settings.goals)
-        .catch((e) => console.error('Kaioken: setting save failed', e));
-    };
     ['gf-wo-week', 'gf-wo-month', 'gf-wo-year', 'gf-su-week', 'gf-su-month', 'gf-wt', 'gf-wa', 'gf-bf'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', saveGoals);

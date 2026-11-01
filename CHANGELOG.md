@@ -8,6 +8,18 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.16.1] - 2026-11-01
+
+### Fixed
+- Editing a body-composition field or a goal target in Settings could
+  silently revert on iOS Safari: the keyboard's Done never blurs the
+  field, and a tap can run the button's handler before the input's
+  change event dispatches - navigation then replaced the DOM and the
+  typed value was lost, so the goal bars never moved. Every re-render
+  now harvests the Settings inputs (profile and goals) before they are
+  torn down, committing whatever is in the fields no matter how the
+  view is left - back button, swipe-back, or an in-card toggle.
+
 ## [1.16.0] - 2026-11-01
 
 ### Changed
