@@ -6,20 +6,17 @@ on:
   push:
     branches: ["main"]
 
+  # Every pull request runs the same gate before it can be merged (#CI-01).
+  # The deploy job is skipped for PRs below.
+  pull_request:
+
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+# Least privilege: no workflow-wide write token. Each job grants only what it
+# needs (#CI-03).
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
 
 jobs:
   # Syntax gate + browser harness. Nothing is published unless this passes.
@@ -27,21 +24,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
       - name: Install harness dependencies
         run: npm ci
-      - name: Install browser
-        run: npx playwright install --with-deps chromium
-      - name: Verify (syntax + 92 browser checks)
+      - name: Audit harness dependencies
+        run: npm audit --audit-level=high
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Verify (syntax + browser checks + WebKit smoke)
+        env:
+          KAIOKEN_WEBKIT: '1'
         run: npm run verify
       - name: Keep failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: harness-failure
           path: test-results/
@@ -49,13 +50,25 @@ jobs:
 
   deploy:
     needs: verify
+    # Pull requests only verify; they never publish (#CI-01).
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    # Allow only one concurrent deployment, skipping runs queued between the
+    # in-progress and latest queued. Do NOT cancel in-progress runs - a
+    # production deployment must finish.
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Stage the site
         # Allowlist, not the whole repo: the dev server sources, the harness,
         # package files and workflows are not part of the published app.
@@ -63,11 +76,11 @@ jobs:
           mkdir -p _site
           cp -R index.html manifest.webmanifest sw.js css js icons img _site/
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

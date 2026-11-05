@@ -407,6 +407,28 @@
     try { bwShown = q('.topbar-title') !== null; } catch (e) {}
     B('per-finished-view', !byId('act-start') && !byId('act-finish') && bwShown, 'read-only view');
 
+    // #74: the stored finish metrics stay editable from the summary card.
+    var editBtn = byId('act-edit-metrics');
+    B('metrics-edit-btn', !!editBtn, editBtn ? txt(editBtn) : 'missing');
+    if (editBtn) {
+      click(editBtn);
+      var esheet = await until(function () { return byId('sheet'); }, 6000, 'metrics sheet');
+      var ebw = byId('fin-bw');
+      B('metrics-edit-prefill',
+        txt(esheet.querySelector('.sheet-title')) === 'Edit metrics' &&
+        !!ebw && ebw.value === '80', ebw ? ebw.value : 'no input');
+      setVal(ebw, '82');
+      click(byId('fin-ok'));
+      await until(function () { return !byId('sheet'); }, 4000, 'metrics sheet closed');
+      await until(function () { return txt(q('.card.note')).indexOf('82') !== -1; }, 6000, 'summary updated');
+      B('metrics-edit-saved', txt(q('.card.note')).indexOf('82 kg') !== -1,
+        txt(q('.card.note')).slice(-70));
+      await waitIdb(function (rows) {
+        return rows.some(function (r) { return r.name === 'Push Day' && r.bodyWeight === 82; });
+      }, 8000, 'stored 82');
+      B('metrics-edit-stored', true, 'body weight 82 in IndexedDB');
+    }
+
     phase(4);
   }
 
@@ -575,6 +597,24 @@
     B('stats-radar', !!radar && qa('.rring').length === 4 && txt(q('.radar-scale')).indexOf('scale 0') !== -1,
       'rings: ' + qa('.rring').length);
 
+    // #72: weighted working-set radar, last week by default, 8 rolling ranges.
+    B('stats-radar-default-week', !!q('.radarsvg') &&
+      txt(q('.radar-meta')).indexOf('working sets') !== -1 &&
+      txt(q('.radar-meta')).indexOf('workouts') !== -1,
+      'meta: ' + txt(q('.radar-meta')));
+    click(byId('btn-mus-opts'));
+    var weekOn = await until(function () {
+      return q('#sheet .opts-item[data-k="range:1w"].on');
+    }, 6000, 'last week selected');
+    B('stats-radar-range-checked', !!weekOn, 'last week checked');
+    var weekMeta = txt(q('.radar-meta'));
+    await optItem('range:1m');
+    var wideMeta = await until(function () {
+      var m = q('.radar-meta');
+      return m && txt(m) !== weekMeta ? txt(m) : null;
+    }, 6000, 'monthly radar');
+    B('stats-radar-range-switch', wideMeta !== weekMeta, weekMeta + ' -> ' + wideMeta);
+
     phase(7);
   }
 
@@ -740,7 +780,44 @@
     phase(11);
   }
 
-  var phases = [phase1, phase2, phase3, phase4, phase5, phase6, phase7, phase8, phase9, phase10, phase11];
+  async function phase12() {
+    // QA-05: themes, goals and programs were shipped feature areas with no
+    // coverage. Theme switching is checked in place, then a weekly workout
+    // goal must reach the Home card, and a program import must render.
+    await openSettings();
+    var mono = await until(function () { return q('.theme-btn[data-th="mono"]'); }, 6000, 'theme buttons');
+    click(mono);
+    await sleep(80);
+    B('theme-switch', D().documentElement.getAttribute('data-theme') === 'mono',
+      'theme=' + D().documentElement.getAttribute('data-theme'));
+    click(await until(function () { return q('.theme-btn[data-th="dark"]'); }, 4000, 'dark theme'));
+    await sleep(80);
+
+    var gwo = await until(function () { return byId('gf-wo-week'); }, 6000, 'goal input');
+    setChange(gwo, '2');
+    await sleep(200);
+    await gotoHome();
+    var goal = await until(function () { return q('.goal-card'); }, 6000, 'goal card');
+    B('goal-save', txt(goal).indexOf('Weekly workouts') !== -1 && txt(goal).indexOf('/2') !== -1,
+      txt(goal).slice(0, 80));
+
+    await openSettings();
+    setVal(byId('ta-import'), JSON.stringify({
+      routines: [],
+      programs: [{ id: 'prog-fx', name: 'PPL', routines: [{ id: 'tpl-1', name: 'Push A', exercises: [] }] }],
+    }));
+    click(byId('act-import'));
+    await until(function () { return byId('sheet-ok'); }, 6000, 'program import confirm');
+    click(byId('sheet-ok'));
+    await until(function () { return byId('act-new'); }, 10000, 'home after program import');
+    await sleep(200);
+    var prog = q('[data-prog="prog-fx"]');
+    B('program-import', !!prog && txt(prog).indexOf('PPL') !== -1,
+      prog ? txt(prog).slice(0, 60) : 'missing');
+    phase(12);
+  }
+
+  var phases = [phase1, phase2, phase3, phase4, phase5, phase6, phase7, phase8, phase9, phase10, phase11, phase12];
 
   (async function run() {
     try {

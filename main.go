@@ -70,6 +70,13 @@ func serveCmd(args []string) {
 		if strings.HasSuffix(p, ".webmanifest") {
 			w.Header().Set("Content-Type", "application/manifest+json")
 		}
+		// The embedded FS exposes directories; refuse trailing-slash paths
+		// (except the root) so the dev server never renders a directory
+		// listing (#SEC-07).
+		if p != "/" && strings.HasSuffix(p, "/") {
+			http.NotFound(w, r)
+			return
+		}
 		if strings.HasSuffix(p, "sw.js") {
 			// Always let the browser revalidate the service worker so
 			// updates are picked up quickly during development.

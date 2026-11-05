@@ -10,14 +10,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
 const { startServers } = require('./serve');
 
 const ARTIFACTS = path.join(__dirname, '..', 'test-results');
 
 const DRIVER_TIMEOUT_MS = 240000;
 const MIN_CHECKS = 70;
-const PHASES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
+const PHASES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 
 const results = [];
 
@@ -215,6 +215,193 @@ async function runServiceWorker(browser, appOrigin) {
   await context.close();
 }
 
+// P0 QA-01: the backup importer is the app's only untrusted-input surface.
+// This runs in a fresh context so the hostile routine never pollutes the main
+// driver's dataset. Payload and assertions mirror the audit POC: markup in
+// every free-text field, markup/NaN strings in every numeric field, an
+// invalid date and an <svg onload> exercise name.
+async function runMaliciousImport(browser, appOrigin) {
+  const MARK = 'MK7x9';
+  const payload = {
+    app: 'kaioken',
+    version: 1,
+    routines: [{
+      id: 'poc-r1',
+      name: MARK + '<img src=x onerror="window.__xssName=1">',
+      date: '<img src=y onerror=window.__xssDate=1>',
+      status: 'completed',
+      bodyWeight: '<script>window.__xssBw=1</script>',
+      neck: '"><svg onload=window.__xssNeck=1>',
+      waist: '</b><b>injected',
+      hip: 'javascript:alert(1)',
+      exercises: [{
+        id: 'poc-e1',
+        name: '<svg onload="window.__xssEx=1">',
+        unit: 'lb',
+        sets: [
+          { id: 'poc-s1', reps: '<img src=x onerror="window.__xssReps=1">', weight: '" onmouseover="alert(1)', done: true },
+          { id: 'poc-s2', reps: 5, weight: 100, done: true },
+        ],
+      }],
+    }],
+  };
+  const context = await browser.newContext({
+    viewport: { width: 500, height: 900 },
+    reducedMotion: 'reduce',
+    serviceWorkers: 'block',
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + String((e && e.message) || e)));
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    const text = m.text();
+    if (/Content-Security-Policy|'script-src' was not explicitly set/.test(text)) return;
+    errors.push('console: ' + text);
+  });
+  try {
+    await page.goto(appOrigin + '/index.html', { timeout: 15000 });
+    await page.waitForSelector('#act-settings', { timeout: 15000 });
+    await page.click('#act-settings');
+    await page.waitForSelector('#act-gen', { timeout: 10000 });
+    await page.fill('#ta-import', JSON.stringify(payload));
+    await page.click('#act-import');
+    await page.waitForSelector('#sheet-ok', { timeout: 6000 });
+    await page.click('#sheet-ok');
+    await page.waitForSelector('#act-new', { timeout: 10000 });
+    await page.waitForTimeout(400);
+
+    const home = await page.evaluate((mark) => {
+      const nameEl = Array.from(document.querySelectorAll('.item-name'))
+        .find((el) => el.textContent.includes(mark));
+      return {
+        itemFound: !!nameEl,
+        nameRenderedAsText: nameEl ? nameEl.textContent.includes('<img') : null,
+        nameParsedAsElement: nameEl ? !!nameEl.querySelector('img') : null,
+        anyHandlerAttr: !!document.querySelector('[onerror], [onload], [onmouseover], [onclick]'),
+        injectedImg: !!document.querySelector('img[src="x"], img[src="y"]'),
+        inlineScript: !!document.querySelectorAll('script:not([src])').length,
+      };
+    }, MARK);
+    record('import-xss-home', home.itemFound && home.nameRenderedAsText === true &&
+      home.nameParsedAsElement === false && !home.anyHandlerAttr && !home.injectedImg &&
+      !home.inlineScript, JSON.stringify(home));
+
+    await page.click('[data-id="poc-r1"]');
+    await page.waitForSelector('.ex-card', { timeout: 10000 });
+    await page.waitForTimeout(300);
+    const detail = await page.evaluate(() => {
+      const exTitle = document.querySelector('.ex-title');
+      const lines = Array.from(document.querySelectorAll('.set-line'));
+      return {
+        title: exTitle ? exTitle.textContent : '',
+        exNameAsText: exTitle ? exTitle.textContent.includes('<svg onload') : null,
+        svgWithHandler: !!document.querySelector('svg[onload]'),
+        lineCount: lines.length,
+        lineInjected: lines.some((r) => /onerror|onload|__xss|<script/i.test(r.innerHTML)),
+        firstLine: lines.length ? lines[0].textContent.trim() : '',
+        injectedBold: !!document.querySelector('#app b b, #app .sum-row b b'),
+        flags: {
+          name: window.__xssName, ex: window.__xssEx, bw: window.__xssBw,
+          neck: window.__xssNeck, reps: window.__xssReps, date: window.__xssDate,
+        },
+      };
+    });
+    const flagsSet = Object.values(detail.flags || {}).some((v) => v !== undefined);
+    record('import-xss-detail', detail.exNameAsText === true && !detail.svgWithHandler &&
+      detail.lineCount === 2 && !detail.lineInjected && !detail.injectedBold &&
+      detail.firstLine.includes('\u2013'), JSON.stringify(detail).slice(0, 320));
+    record('import-xss-no-exec', !flagsSet, JSON.stringify(detail.flags));
+    record('import-xss-no-errors', errors.length === 0, errors.join(' | ').slice(0, 300));
+  } catch (err) {
+    record('import-xss-home', false, err.message);
+    record('import-xss-detail', false, 'import failed before assertions');
+    record('import-xss-no-exec', false, 'import failed before assertions');
+    record('import-xss-no-errors', errors.length === 0, errors.join(' | ').slice(0, 300));
+  }
+  await context.close();
+}
+
+// P1 QA-04: the storage failure paths used to be dead code to the harness.
+// (a) a failed DB open must render the guidance card, not a blank screen;
+// (b) a failed settings write must raise the save-warning banner.
+async function runStorageFailure(browser, appOrigin) {
+  {
+    const context = await browser.newContext({ reducedMotion: 'reduce', serviceWorkers: 'block' });
+    await context.addInitScript(() => {
+      indexedDB.open = function () { throw new Error('forced-open-failure'); };
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(appOrigin + '/index.html', { timeout: 15000 });
+      const note = await page.waitForSelector('#app .card.note', { timeout: 15000 });
+      const text = (await note.textContent()) || '';
+      record('storage-open-failure', /Could not open the local database/.test(text), text.slice(0, 120));
+    } catch (err) {
+      record('storage-open-failure', false, err.message);
+    }
+    await context.close();
+  }
+  {
+    const context = await browser.newContext({ reducedMotion: 'reduce', serviceWorkers: 'block' });
+    const page = await context.newPage();
+    try {
+      await page.goto(appOrigin + '/index.html', { timeout: 15000 });
+      await page.waitForSelector('#act-settings', { timeout: 15000 });
+      await page.evaluate(() => {
+        const put = function () { throw new Error('forced-write-failure'); };
+        try {
+          IDBObjectStore.prototype.put = put;
+        } catch (err) {
+          Object.defineProperty(IDBObjectStore.prototype, 'put', { value: put, configurable: true });
+        }
+      });
+      await page.click('#act-settings');
+      await page.waitForSelector('.theme-btn[data-th="light"]', { timeout: 10000 });
+      await page.click('.theme-btn[data-th="light"]');
+      const warn = await page.waitForSelector('#save-warn', { timeout: 5000 }).catch(() => null);
+      const text = warn ? ((await warn.textContent()) || '') : '';
+      record('storage-save-warn', /Saving failed/.test(text), text.slice(0, 120));
+    } catch (err) {
+      record('storage-save-warn', false, err.message);
+    }
+    await context.close();
+  }
+}
+
+// P1 QA-02: WebKit smoke. Playwright ships the engine, but the binary is a
+// heavy install, so this only runs when the CI job opts in with
+// KAIOKEN_WEBKIT=1. Checks are "soft-" prefixed: a WebKit runner hiccup is
+// surfaced as a warning rather than failing the Chromium gate.
+async function runWebkitSmoke(webkit, appOrigin) {
+  let browser;
+  try {
+    browser = await webkit.launch({ headless: true });
+  } catch (err) {
+    record('soft-webkit-launch', false, err.message.slice(0, 200));
+    return;
+  }
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String((e && e.message) || e)));
+  try {
+    await page.goto(appOrigin + '/index.html', { timeout: 20000 });
+    await page.waitForSelector('#act-new', { timeout: 20000 });
+    record('soft-webkit-boot', true, 'home rendered');
+    await page.click('#act-stats');
+    await page.waitForSelector('.seg-tabs', { timeout: 10000 });
+    await page.click('.seg-tabs button[data-t="heatmap"]');
+    const radar = await page.waitForSelector('.radarsvg', { timeout: 10000 }).catch(() => null);
+    record('soft-webkit-radar', !!radar, radar ? 'radar rendered' : 'radar missing');
+    record('soft-webkit-errors', errors.length === 0, errors.join(' | ').slice(0, 200));
+  } catch (err) {
+    record('soft-webkit-boot', false, err.message.slice(0, 200));
+  }
+  await context.close();
+  await browser.close();
+}
+
 async function main() {
   const servers = await startServers(2);
   const appOrigin = servers.origin(0);
@@ -228,6 +415,10 @@ async function main() {
     const driver = await runDriver(browser, appOrigin);
     failed += driver.hardFails;
     warned += driver.softWarns;
+
+    await runMaliciousImport(browser, appOrigin);
+    await runStorageFailure(browser, appOrigin);
+    if (process.env.KAIOKEN_WEBKIT === '1') await runWebkitSmoke(webkit, appOrigin);
 
     await runFrameGuard(browser, appOrigin, altOrigin);
     await runServiceWorker(browser, appOrigin);

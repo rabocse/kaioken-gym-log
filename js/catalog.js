@@ -280,6 +280,163 @@ function gymlogCategoryOf(name) {
   return GYMLOG_EX_LOWER[n] || 'Other';
 }
 
+// Training axes of the stats radar (#72). Core, Full Body, Cardio and Other
+// are intentionally absent: they have no stable muscle volume.
+const GYMLOG_MUSCLE_AXES = [
+  'Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps',
+  'Quads', 'Hamstrings', 'Glutes', 'Calves',
+];
+
+// Weighted contribution of one working set per axis: primary muscles earn a
+// full set, secondary muscles half a set. Compound lifts credit every muscle
+// they train. Names not listed fall back to their single catalog category at
+// full weight; full-body/cardio/core names map to no axis.
+const GYMLOG_MUSCLE_WEIGHTS = {
+  'Bench Press': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Incline Bench Press': { Chest: 1, Shoulders: 0.5, Triceps: 0.5 },
+  'Decline Bench Press': { Chest: 1, Triceps: 0.5 },
+  'Dumbbell Bench Press': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Incline Dumbbell Press': { Chest: 1, Shoulders: 0.5, Triceps: 0.5 },
+  'Decline Dumbbell Press': { Chest: 1, Triceps: 0.5 },
+  'Barbell Floor Press': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Smith Machine Bench Press': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Incline Smith Machine Press': { Chest: 1, Shoulders: 0.5, Triceps: 0.5 },
+  'Decline Smith Machine Press': { Chest: 1, Triceps: 0.5 },
+  'Machine Chest Press': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Incline Machine Chest Press': { Chest: 1, Shoulders: 0.5, Triceps: 0.5 },
+  'Decline Machine Chest Press': { Chest: 1, Triceps: 0.5 },
+  'Cable Chest Press': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Standing Cable Chest Press': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Push-Up': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Incline Push-Up': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Decline Push-Up': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Diamond Push-Up': { Triceps: 1, Chest: 0.5 },
+  'Weighted Push-Up': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Dips': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Weighted Dip': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Assisted Dip': { Chest: 1, Triceps: 0.5, Shoulders: 0.5 },
+  'Deadlift': { Back: 1, Glutes: 0.5, Hamstrings: 0.5 },
+  'Sumo Deadlift': { Back: 1, Glutes: 0.5, Hamstrings: 0.5 },
+  'Trap Bar Deadlift': { Back: 1, Glutes: 0.5, Quads: 0.5 },
+  'Deficit Deadlift': { Back: 1, Hamstrings: 0.5, Glutes: 0.5 },
+  'Snatch-Grip Deadlift': { Back: 1, Hamstrings: 0.5, Glutes: 0.5 },
+  'Rack Pull': { Back: 1, Glutes: 0.5 },
+  'Barbell Row': { Back: 1, Biceps: 0.5 },
+  'Pendlay Row': { Back: 1, Biceps: 0.5 },
+  'T-Bar Row': { Back: 1, Biceps: 0.5 },
+  'Seal Row': { Back: 1, Biceps: 0.5 },
+  'Dumbbell Row': { Back: 1, Biceps: 0.5 },
+  'Single-Arm Dumbbell Row': { Back: 1, Biceps: 0.5 },
+  'Meadows Row': { Back: 1, Biceps: 0.5 },
+  'Smith Machine Row': { Back: 1, Biceps: 0.5 },
+  'Chest-Supported Row': { Back: 1, Biceps: 0.5 },
+  'Chest-Supported Machine Row': { Back: 1, Biceps: 0.5 },
+  'Iso-Lateral Machine Row': { Back: 1, Biceps: 0.5 },
+  'Seated Machine Row': { Back: 1, Biceps: 0.5 },
+  'Inverted Row': { Back: 1, Biceps: 0.5 },
+  'Cable Row': { Back: 1, Biceps: 0.5 },
+  'Wide-Grip Seated Cable Row': { Back: 1, Biceps: 0.5 },
+  'Close-Grip Cable Row': { Back: 1, Biceps: 0.5 },
+  'Single-Arm Cable Row': { Back: 1, Biceps: 0.5 },
+  'Lat Pulldown': { Back: 1, Biceps: 0.5 },
+  'Wide-Grip Lat Pulldown': { Back: 1, Biceps: 0.5 },
+  'Close-Grip Lat Pulldown': { Back: 1, Biceps: 0.5 },
+  'Reverse-Grip Lat Pulldown': { Back: 1, Biceps: 0.5 },
+  'Neutral-Grip Lat Pulldown': { Back: 1, Biceps: 0.5 },
+  'Single-Arm Lat Pulldown': { Back: 1, Biceps: 0.5 },
+  'Pull-Up': { Back: 1, Biceps: 0.5 },
+  'Wide-Grip Pull-Up': { Back: 1, Biceps: 0.5 },
+  'Neutral-Grip Pull-Up': { Back: 1, Biceps: 0.5 },
+  'Chin-Up': { Back: 1, Biceps: 0.5 },
+  'Close-Grip Chin-Up': { Back: 1, Biceps: 0.5 },
+  'Muscle-Up': { Back: 1, Biceps: 0.5, Triceps: 0.5 },
+  'Assisted Pull-Up': { Back: 1, Biceps: 0.5 },
+  'Back Extension': { Back: 1, Glutes: 0.5 },
+  'Dumbbell Pullover': { Back: 1, Chest: 0.5 },
+  'Barbell Pullover': { Back: 1, Chest: 0.5 },
+  'Overhead Press': { Shoulders: 1, Triceps: 0.5 },
+  'Smith Machine Overhead Press': { Shoulders: 1, Triceps: 0.5 },
+  'Push Press': { Shoulders: 1, Triceps: 0.5 },
+  'Arnold Press': { Shoulders: 1, Triceps: 0.5 },
+  'Seated Dumbbell Press': { Shoulders: 1, Triceps: 0.5 },
+  'Machine Shoulder Press': { Shoulders: 1, Triceps: 0.5 },
+  'Z Press': { Shoulders: 1, Triceps: 0.5 },
+  'Landmine Press': { Shoulders: 1, Triceps: 0.5 },
+  'Single-Arm Landmine Press': { Shoulders: 1, Triceps: 0.5 },
+  'Pike Push-Up': { Shoulders: 1, Triceps: 0.5 },
+  'Handstand Push-Up': { Shoulders: 1, Triceps: 0.5 },
+  'Upright Row': { Shoulders: 1, Biceps: 0.5 },
+  'Dumbbell Upright Row': { Shoulders: 1, Biceps: 0.5 },
+  'Cable Upright Row': { Shoulders: 1, Biceps: 0.5 },
+  'Face Pull': { Shoulders: 1, Back: 0.5 },
+  'Close-Grip Bench Press': { Triceps: 1, Chest: 0.5, Shoulders: 0.5 },
+  'Bench Dip': { Triceps: 1, Chest: 0.5, Shoulders: 0.5 },
+  'Machine Dip': { Triceps: 1, Chest: 0.5 },
+  'Squat': { Quads: 1, Glutes: 0.5 },
+  'Front Squat': { Quads: 1, Glutes: 0.5 },
+  'Box Squat': { Quads: 1, Glutes: 0.5 },
+  'Zercher Squat': { Quads: 1, Glutes: 0.5 },
+  'Overhead Squat': { Quads: 1, Glutes: 0.5 },
+  'Sumo Squat': { Quads: 1, Glutes: 0.5 },
+  'Dumbbell Squat': { Quads: 1, Glutes: 0.5 },
+  'Goblet Squat': { Quads: 1, Glutes: 0.5 },
+  'Hack Squat': { Quads: 1, Glutes: 0.5 },
+  'Smith Machine Squat': { Quads: 1, Glutes: 0.5 },
+  'Landmine Squat': { Quads: 1, Glutes: 0.5 },
+  'Belt Squat': { Quads: 1, Glutes: 0.5 },
+  'Sissy Squat': { Quads: 1 },
+  'Pistol Squat': { Quads: 1, Glutes: 0.5 },
+  'Split Squat': { Quads: 1, Glutes: 0.5 },
+  'Bulgarian Split Squat': { Quads: 1, Glutes: 0.5 },
+  'Leg Press': { Quads: 1, Glutes: 0.5 },
+  'Single-Leg Press': { Quads: 1, Glutes: 0.5 },
+  'Lunge': { Quads: 1, Glutes: 0.5 },
+  'Walking Lunge': { Quads: 1, Glutes: 0.5 },
+  'Reverse Lunge': { Quads: 1, Glutes: 0.5 },
+  'Curtsy Lunge': { Quads: 1, Glutes: 0.5 },
+  'Step-Up': { Quads: 1, Glutes: 0.5 },
+  'Romanian Deadlift': { Hamstrings: 1, Glutes: 0.5, Back: 0.5 },
+  'Stiff-Leg Deadlift': { Hamstrings: 1, Glutes: 0.5 },
+  'Single-Leg Romanian Deadlift': { Hamstrings: 1, Glutes: 0.5 },
+  'Good Morning': { Hamstrings: 1, Glutes: 0.5, Back: 0.5 },
+  'Glute-Ham Raise': { Hamstrings: 1, Glutes: 0.5 },
+  'Cable Pull-Through': { Glutes: 1, Hamstrings: 0.5 },
+  'Reverse Hyperextension': { Glutes: 1, Hamstrings: 0.5 },
+  'Power Clean': { Back: 0.5, Glutes: 0.5, Hamstrings: 0.5, Quads: 0.5 },
+  'Hang Clean': { Back: 0.5, Glutes: 0.5, Hamstrings: 0.5, Quads: 0.5 },
+  'Clean and Jerk': { Shoulders: 0.5, Glutes: 0.5, Hamstrings: 0.5, Quads: 0.5 },
+  'Clean and Press': { Shoulders: 0.5, Glutes: 0.5, Hamstrings: 0.5, Quads: 0.5 },
+  'Snatch': { Shoulders: 0.5, Back: 0.5, Hamstrings: 0.5, Quads: 0.5 },
+  'Dumbbell Snatch': { Shoulders: 0.5, Back: 0.5, Hamstrings: 0.5, Quads: 0.5 },
+  'Thruster': { Quads: 0.5, Shoulders: 0.5, Triceps: 0.5 },
+  "Farmer's Walk": { Back: 0.5, Calves: 0.5, Shoulders: 0.5 },
+  'Kettlebell Swing': { Hamstrings: 0.5, Glutes: 0.5, Back: 0.5 },
+  'Kettlebell Clean': { Shoulders: 0.5, Hamstrings: 0.5, Glutes: 0.5 },
+  'Kettlebell Snatch': { Shoulders: 0.5, Hamstrings: 0.5, Glutes: 0.5 },
+  'Turkish Get-Up': { Shoulders: 0.5, Quads: 0.5, Glutes: 0.5 },
+  'Wall Ball': { Quads: 0.5, Shoulders: 0.5 },
+  'Burpee': { Quads: 0.5, Chest: 0.5, Shoulders: 0.5 },
+  'Battle Ropes': { Shoulders: 0.5, Back: 0.5 },
+};
+
+const GYMLOG_MUSCLE_WEIGHTS_LOWER = {};
+Object.keys(GYMLOG_MUSCLE_WEIGHTS).forEach((k) => {
+  GYMLOG_MUSCLE_WEIGHTS_LOWER[k.toLowerCase()] = GYMLOG_MUSCLE_WEIGHTS[k];
+});
+
+// Per-axis weights for one working set of the named exercise. Unknown names
+// and isolation lifts use their catalog category (primary, 1.0) when that
+// category is a radar axis; Core/Full Body/Cardio/Other return no axis.
+function gymlogMuscleWeights(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (GYMLOG_MUSCLE_WEIGHTS_LOWER[n]) return GYMLOG_MUSCLE_WEIGHTS_LOWER[n];
+  const cat = gymlogCategoryOf(name);
+  if (GYMLOG_MUSCLE_AXES.indexOf(cat) === -1) return {};
+  const out = {};
+  out[cat] = 1;
+  return out;
+}
+
 const GYMLOG_CAT_COLORS = {
   Chest: '#f87171',
   Back: '#60a5fa',

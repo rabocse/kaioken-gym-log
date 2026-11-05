@@ -8,6 +8,35 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.17.0] - 2026-11-05
+
+### Added
+- Edit metrics after finishing (#74): the completed workout summary card
+  has an Edit metrics button that reopens the finish sheet with the saved
+  body weight, waist, neck, hip and creatine/protein values. Saving also
+  updates the body-composition profile and the measurement goals, so a
+  typo or a forgotten measurement no longer means editing a backup.
+- The Muscles stats tab is a weighted working-set radar (#72): every set
+  credits its primary muscle group with 1.0 and secondary groups with
+  0.5, cardio/core work adds to the set total without an axis, and each
+  axis is normalized to the most-trained group so a week and a month are
+  comparable. Nine axes (chest, back, shoulders, biceps, triceps, quads,
+  hamstrings, glutes, calves), eight rolling ranges defaulting to the
+  last week, plus total working sets, workout count and sets/week.
+
+### Fixed
+- Settings and routine-delete failures now show the save warning instead
+  of only logging to the console, and still propagate to callers.
+- Routines read from IndexedDB are re-sanitized on load, so a record
+  written by an older or foreign context cannot reach innerHTML with
+  unvalidated fields.
+- The service worker's cold-miss fetch bypasses the HTTP cache, matching
+  the revalidation path.
+- The app icons declare `any maskable`; the dev server refuses directory
+  listings; the date formatters escape their invalid-input fallback.
+- CI: pull requests run the verify gate, actions are pinned to commit
+  SHAs, and each job gets only the permissions it needs.
+
 ## [1.16.1] - 2026-11-01
 
 ### Fixed

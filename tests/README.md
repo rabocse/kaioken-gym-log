@@ -31,22 +31,23 @@ Set `KAIOKEN_HEADED=1` to watch the browser.
 Phases share one session in order, so a crash in one phase usually shows up
 as cascading failures in the next. Read the first `FAIL` line.
 
-## What is covered (89 checks)
+## What is covered (105 checks)
 
 | Phase | Area |
 |---|---|
 | 1 | boot, catalog, empty state, no JS errors |
 | 2 | new routine, name suggestions, create, exercise autocomplete |
 | 3 | start workout, fold/unfold, typing sets, stats line, rest timer, add/remove set, cardio layout |
-| 4 | finish sheet, body weight/supps, IndexedDB persistence across reload |
+| 4 | finish sheet, body weight/supps, IndexedDB persistence across reload, edit metrics after finishing (#74) |
 | 5 | export shape, settings version line vs manifest version, import merge, bad JSON, duplicate ids |
 | 6 | action sheet, gesture lock, Escape, Tab trap, rename, duplicate, delete |
-| 7 | stats tabs, exercise selector, bar mode, volume gutter, radar |
+| 7 | stats tabs, exercise selector, bar mode, volume gutter, weighted muscle radar + range switch (#72) |
 | 8 | CSP meta + zero violations, CSSOM-painted data attributes (`.segm`, `.bd-dot`, theme swatches) |
 | 9 | chart y-axis ticks/gridlines/unit, rescale on exercise switch, bar-gutter alignment and scaling, range change |
 | 10 | share button gating, 1080×1350 PNG, canvas pixels, copy, Escape, scheduled routines excluded |
 | 11 | same-origin framing allowed, no errors at exit |
-| runner | cross-origin frame guard, service worker registration + cache named from manifest version |
+| 12 | theme switch, weekly goal reaches the Home card, program import renders |
+| runner | cross-origin frame guard, service worker registration + cache named from manifest version, malicious-import XSS regression (QA-01), DB-open and save-failure paths (QA-04), optional WebKit smoke (`KAIOKEN_WEBKIT=1`, QA-02) |
 
 `soft-*` checks are reported as `WARN` and never fail the run; they encode
 layout expectations that can differ between machines.

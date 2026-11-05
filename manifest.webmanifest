@@ -2,7 +2,7 @@
   "name": "Kaioken",
   "short_name": "Kaioken",
   "description": "Minimalist gym routine tracker.",
-  "version": "1.16.1",
+  "version": "1.17.0",
   "start_url": ".",
   "scope": ".",
   "id": "./",
@@ -11,7 +11,7 @@
   "background_color": "#0f1316",
   "theme_color": "#0f1316",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }

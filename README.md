@@ -94,7 +94,7 @@ The app itself is pure static files — there is no backend.
 ### Verify before pushing
 
 The browser harness in `tests/` loads the real app, drives it like a user and
-checks the DOM, charts, CSP, storage and the share card (92 checks). It is
+checks the DOM, charts, CSP, storage and the share card (105 checks). It is
 dev-only tooling: nothing under `tests/` is published.
 
 Requires Node 20+ (once: `npm ci && npx playwright install chromium`):

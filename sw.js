@@ -13,7 +13,7 @@
 // together: VERSION here, APP_VERSION (js/app.js) and the version in
 // manifest.webmanifest. `npm run verify` fails if they drift apart.
 
-const VERSION = '1.16.1';
+const VERSION = '1.17.0';
 const CACHE = 'kaioken-' + VERSION;
 const ASSETS = [
   './',
@@ -90,7 +90,9 @@ self.addEventListener('fetch', (e) => {
         );
         return cached;
       }
-      return fetch(req)
+      // no-cache skips the HTTP cache on a cold miss too (#RES-03), or a
+      // stale copy served by the browser could be cached as "fresh".
+      return fetch(new Request(req.url, { cache: 'no-cache' }))
         .then((res) => {
           if (res.ok) {
             const copy = res.clone();

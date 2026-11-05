@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.16.1';
+  const APP_VERSION = '1.17.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -89,15 +89,20 @@
     }));
   }
 
+  // A failed write must never be console-only (#RES-01): the banner tells
+  // the user their edits are not being stored, and the rejection is still
+  // propagated so callers that await (import, backup) can abort.
   const store = {
     all: () => withStore('routines', 'readonly', (s) => s.getAll()),
     put: (r) => withStore('routines', 'readwrite', (s) => s.put(r)),
-    del: (id) => withStore('routines', 'readwrite', (s) => s.delete(id)),
+    del: (id) => withStore('routines', 'readwrite', (s) => s.delete(id))
+      .catch((e) => { showSaveWarn(); throw e; }),
     getSetting: (key, fallback) =>
       withStore('settings', 'readonly', (s) => s.get(key))
         .then((row) => (row && row.value !== undefined ? row.value : fallback)),
     setSetting: (key, value) =>
-      withStore('settings', 'readwrite', (s) => s.put({ key: key, value: value })),
+      withStore('settings', 'readwrite', (s) => s.put({ key: key, value: value }))
+        .catch((e) => { showSaveWarn(); throw e; }),
   }
 
   /* ---------- helpers ---------- */
@@ -153,7 +158,7 @@
   function fmtDate(iso) {
     if (!iso) return '';
     const parts = String(iso).split('-').map(Number);
-    if (parts.length !== 3 || parts.some((n) => !n)) return String(iso);
+    if (parts.length !== 3 || parts.some((n) => !n)) return esc(String(iso));
     return new Date(parts[0], parts[1] - 1, parts[2])
       .toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   }
@@ -913,11 +918,13 @@
     document.getElementById('sheet-ok').onclick = guard(closeSheet);
   }
 
-  // Finish check-in: before a workout is recorded as completed, a sheet
-  // asks for creatine/protein (yes/no switch, remembering the last answer)
-  // and today's body weight (optional; the kg/lb choice is remembered).
-  // Both are saved on the routine with the finish time.
-  function openFinishSheet(r) {
+  // Finish check-in and the post-workout metric editor share this sheet
+  // (#74): same fields, unit switches and profile updates; `isEdit` only
+  // skips the completion transition. Before finishing, the sheet asks for
+  // creatine/protein (yes/no switch, remembering the last answer) and
+  // today's body weight (optional; the kg/lb choice is remembered). Both
+  // are saved on the routine with the finish time.
+  function openMetricsSheet(r, isEdit) {
     closeSheet();
     sheetGestureLock = true;
     const guard = (fn) => () => {
@@ -929,33 +936,44 @@
     const sheet = document.createElement('div');
     sheet.id = 'sheet';
     sheet.setAttribute('role', 'dialog');
-    const finWarnN = r.exercises.reduce((n, ex) =>
+    const finWarnN = isEdit ? 0 : r.exercises.reduce((n, ex) =>
       n + ex.sets.filter((s) => !s.done &&
         (s.reps != null || s.weight != null || s.mins != null || s.dist != null)).length, 0);
-    // Only the metrics enabled in Settings are prompted (#v1.13.0);
-    // every entered value also updates the body-composition profile, so
-    // the Navy body-fat readout and the measurement goals stay current.
+    // Only the metrics enabled in Settings are prompted (#v1.13.0); every
+    // entered value also updates the body-composition profile, so the Navy
+    // body-fat readout and the measurement goals stay current. When editing
+    // a finished workout, a value that is already stored is shown even if
+    // its prompt is now disabled, so it stays editable.
     const fm = settings.finishMetrics ||
       { weight: true, waist: true, neck: false, hip: false };
     const female = (settings.bodyProfile && settings.bodyProfile.sex) === 'f';
-    let lenUnit = settings.waistUnit === 'in' ? 'in' : 'cm';
+    const showW = fm.weight || r.bodyWeight != null;
+    const showWa = fm.waist || r.waist != null;
+    const showNk = fm.neck || r.neck != null;
+    const showHp = (fm.hip && female) || r.hip != null;
+    const suppsInit = isEdit ? r.supps === true : settings.suppsLast;
+    const vstr = (v) => (v == null ? '' : String(v));
+    let bwUnit = (isEdit ? r.bwUnit : settings.bwUnit) === 'lb' ? 'lb' : 'kg';
+    let lenUnit = (isEdit ? r.waistUnit : settings.waistUnit) === 'in' ? 'in' : 'cm';
     const lenSegHTML = () =>
       '<span class="seg seg-len">' +
       '<button type="button" class="' + (lenUnit === 'cm' ? 'on' : '') + '" data-lu="cm">cm</button>' +
       '<button type="button" class="' + (lenUnit === 'in' ? 'on' : '') + '" data-lu="in">in</button>' +
       '</span>';
-    const measRow = (id, label) =>
+    const measRow = (id, label, v) =>
       '<div class="fin-row">' +
       '<span>' + label + '</span>' +
       '<span class="fin-bw">' +
-      '<input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" placeholder="optional">' +
+      '<input id="' + id + '" type="text" inputmode="decimal" autocomplete="off" placeholder="optional" value="' + esc(vstr(v)) + '">' +
       lenSegHTML() +
       '</span>' +
       '</div>';
 
     sheet.innerHTML =
-      '<div class="sheet-title">Finish workout?</div>' +
-      '<div class="fin-sub">Recorded duration ' + fmtFull(monoNow() - r.startedAt) + '</div>' +
+      '<div class="sheet-title">' + (isEdit ? 'Edit metrics' : 'Finish workout?') + '</div>' +
+      '<div class="fin-sub">' + (isEdit
+        ? 'Logged for ' + esc(fmtDate(r.date))
+        : 'Recorded duration ' + fmtFull(monoNow() - r.startedAt)) + '</div>' +
       (finWarnN
         ? '<div class="fin-sub fin-warn">' + finWarnN +
         (finWarnN === 1 ? ' set is' : ' sets are') + ' not marked done \u2014 finish anyway?</div>'
@@ -963,28 +981,28 @@
       '<div class="fin-row">' +
       '<span>Creatine / protein today?</span>' +
       '<label class="switch"><input type="checkbox" id="fin-supps"' +
-      (settings.suppsLast ? ' checked' : '') + '><span class="sw-track"></span></label>' +
+      (suppsInit ? ' checked' : '') + '><span class="sw-track"></span></label>' +
       '</div>' +
-      (fm.weight
+      (showW
         ? '<div class="fin-row">' +
           '<span>Body weight</span>' +
           '<span class="fin-bw">' +
-          '<input id="fin-bw" type="text" inputmode="decimal" autocomplete="off" placeholder="optional">' +
+          '<input id="fin-bw" type="text" inputmode="decimal" autocomplete="off" placeholder="optional" value="' + esc(vstr(r.bodyWeight)) + '">' +
           '<span class="seg seg-bw">' +
-          '<button type="button" class="' + (settings.bwUnit === 'lb' ? '' : 'on') + '" data-bw="kg">kg</button>' +
-          '<button type="button" class="' + (settings.bwUnit === 'lb' ? 'on' : '') + '" data-bw="lb">lb</button>' +
+          '<button type="button" class="' + (bwUnit === 'lb' ? '' : 'on') + '" data-bw="kg">kg</button>' +
+          '<button type="button" class="' + (bwUnit === 'lb' ? 'on' : '') + '" data-bw="lb">lb</button>' +
           '</span>' +
           '</span>' +
           '</div>'
         : '') +
-      (fm.waist ? measRow('fin-waist', 'Waist') : '') +
-      (fm.neck ? measRow('fin-neck', 'Neck') : '') +
-      (fm.hip && female ? measRow('fin-hip', 'Hip') : '') +
-      '<button class="btn btn-primary btn-block" id="fin-ok" type="button">Finish Workout</button>' +
+      (showWa ? measRow('fin-waist', 'Waist', r.waist) : '') +
+      (showNk ? measRow('fin-neck', 'Neck', r.neck) : '') +
+      (showHp ? measRow('fin-hip', 'Hip', r.hip) : '') +
+      '<button class="btn btn-primary btn-block" id="fin-ok" type="button">' +
+      (isEdit ? 'Save Metrics' : 'Finish Workout') + '</button>' +
       '<button class="btn btn-ghost btn-block" id="fin-cancel" type="button">Cancel</button>';
     mountSheet(backdrop, sheet);
 
-    let bwUnit = settings.bwUnit === 'lb' ? 'lb' : 'kg';
     const bwIn = document.getElementById('fin-bw');
     if (bwIn) {
       sheet.querySelectorAll('.seg-bw button').forEach((b) => {
@@ -1049,11 +1067,29 @@
         store.setSetting('bodyProfile', prof)
           .catch((e) => console.error('Kaioken: setting save failed', e));
       }
-      const heatBefore = computeHeat();
-      stopRest();
-      r.status = 'completed';
-      r.endedAt = monoNow();
-      r.date = todayISO();
+      if (!isEdit) {
+        const heatBefore = computeHeat();
+        stopRest();
+        r.status = 'completed';
+        r.endedAt = monoNow();
+        r.date = todayISO();
+        r.supps = supps;
+        r.bodyWeight = bw;
+        r.bwUnit = bwUnit;
+        r.waist = wa;
+        r.waistUnit = lenUnit;
+        r.neck = nk;
+        r.neckUnit = lenUnit;
+        r.hip = hp;
+        r.hipUnit = lenUnit;
+        scheduleSave(r, true);
+        render();
+        const heatAfter = computeHeat();
+        if (heatAfter > heatBefore && settings.theme === 'kaioken') {
+          toast(HEAT_LEVELS[heatAfter].label + '!');
+        }
+        return;
+      }
       r.supps = supps;
       r.bodyWeight = bw;
       r.bwUnit = bwUnit;
@@ -1065,10 +1101,7 @@
       r.hipUnit = lenUnit;
       scheduleSave(r, true);
       render();
-      const heatAfter = computeHeat();
-      if (heatAfter > heatBefore && settings.theme === 'kaioken') {
-        toast(HEAT_LEVELS[heatAfter].label + '!');
-      }
+      toast('Metrics updated');
     });
   }
 
@@ -2093,13 +2126,15 @@
       '<div class="sum-row"><span>Creatine / protein</span><b>' +
       (r.supps === true ? 'yes' : r.supps === false ? 'no' : '\u2013') + '</b></div>' +
       '<div class="sum-row"><span>Body weight</span><b>' +
-      (r.bodyWeight == null ? '\u2013' : r.bodyWeight + ' ' + esc(r.bwUnit || 'kg')) + '</b></div>' +
+      (r.bodyWeight == null ? '\u2013' : esc(r.bodyWeight) + ' ' + esc(r.bwUnit || 'kg')) + '</b></div>' +
       '<div class="sum-row"><span>Waist</span><b>' +
-      (r.waist == null ? '\u2013' : r.waist + ' ' + esc(r.waistUnit || 'cm')) + '</b></div>' +
+      (r.waist == null ? '\u2013' : esc(r.waist) + ' ' + esc(r.waistUnit || 'cm')) + '</b></div>' +
       (r.neck == null ? '' : '<div class="sum-row"><span>Neck</span><b>' +
-        r.neck + ' ' + esc(r.neckUnit || 'cm') + '</b></div>') +
+        esc(r.neck) + ' ' + esc(r.neckUnit || 'cm') + '</b></div>') +
       (r.hip == null ? '' : '<div class="sum-row"><span>Hip</span><b>' +
-        r.hip + ' ' + esc(r.hipUnit || 'cm') + '</b></div>') +
+        esc(r.hip) + ' ' + esc(r.hipUnit || 'cm') + '</b></div>') +
+      // #74: the stored metrics stay editable after the workout is saved.
+      '<button class="btn btn-ghost btn-block edit-metrics" id="act-edit-metrics" type="button">Edit metrics</button>' +
       '</div>';
   }
 
@@ -2261,12 +2296,12 @@
               ? '<span class="set-idx warm">' + I.thermo + '</span>'
               : '<span class="set-idx">' + workN + '</span>')));
         const body = cardio
-          ? '<span>' + (s.mins == null ? '\u2013' : s.mins) + ' min</span>' +
+          ? '<span>' + (s.mins == null ? '\u2013' : esc(s.mins)) + ' min</span>' +
             '<span class="mult">\u00b7</span>' +
-            '<span>' + (s.dist == null ? '\u2013' : s.dist) + ' ' + esc(ex.dunit || 'km') + '</span>'
-          : '<span>' + (s.weight == null ? '\u2013' : s.weight) + ' ' + esc(ex.unit) + '</span>' +
+            '<span>' + (s.dist == null ? '\u2013' : esc(s.dist)) + ' ' + esc(ex.dunit || 'km') + '</span>'
+          : '<span>' + (s.weight == null ? '\u2013' : esc(s.weight)) + ' ' + esc(ex.unit) + '</span>' +
             '<span class="mult">\u00d7</span>' +
-            '<span>' + (s.reps == null ? '\u2013' : s.reps) + ' reps</span>';
+            '<span>' + (s.reps == null ? '\u2013' : esc(s.reps)) + ' reps</span>';
         return '<div class="set-line' + (s.done ? ' done' : '') + (pr ? ' pr' : '') + '">' + lead + body + '</div>';
       }).join('');
       return '<div class="card ex-card">' +
@@ -2301,15 +2336,15 @@
         if (ghost != null) { repsCls += ' pr-hint'; repsPh = String(ghost); }
       }
       const fields = cardio
-        ? '<input class="in-mins" type="text" inputmode="decimal" autocomplete="off" placeholder="min" value="' + (s.mins == null ? '' : s.mins) + '">' +
+        ? '<input class="in-mins" type="text" inputmode="decimal" autocomplete="off" placeholder="min" value="' + (s.mins == null ? '' : esc(s.mins)) + '">' +
           '<span class="unit-tag min-tag">min</span>' +
-          '<input class="in-dist" type="text" inputmode="decimal" autocomplete="off" placeholder="dist" value="' + (s.dist == null ? '' : s.dist) + '">' +
+          '<input class="in-dist" type="text" inputmode="decimal" autocomplete="off" placeholder="dist" value="' + (s.dist == null ? '' : esc(s.dist)) + '">' +
           '<span class="unit-tag dunit-tag">' + esc(ex.dunit || 'km') + '</span>'
         : // iOS hides the decimal key for type="number" in many locales;
           // text + inputmode="decimal" always shows it.
-          '<input class="in-weight" type="text" inputmode="decimal" autocomplete="off" placeholder="weight" value="' + (s.weight == null ? '' : s.weight) + '">' +
+          '<input class="in-weight" type="text" inputmode="decimal" autocomplete="off" placeholder="weight" value="' + (s.weight == null ? '' : esc(s.weight)) + '">' +
           '<span class="unit-tag">' + esc(ex.unit) + '</span>' +
-          '<input class="' + repsCls + '" type="number" inputmode="numeric" min="0" step="1" placeholder="' + repsPh + '" value="' + (s.reps == null ? '' : s.reps) + '">' +
+          '<input class="' + repsCls + '" type="number" inputmode="numeric" min="0" step="1" placeholder="' + repsPh + '" value="' + (s.reps == null ? '' : esc(s.reps)) + '">' +
           '<span class="unit-tag reps-tag">reps</span>';
       return '<div class="set-row' + (cardio ? ' cardio' : '') + (s.done ? ' done' : '') + (pr ? ' pr' : '') + '" data-sid="' + esc(s.id) + '">' +
         check + fields +
@@ -2653,6 +2688,8 @@
     document.getElementById('act-more').onclick = () => openSheet(r);
     const shareAct = document.getElementById('act-share');
     if (shareAct) shareAct.onclick = () => shareHighlight(r);
+    const editMetrics = document.getElementById('act-edit-metrics');
+    if (editMetrics) editMetrics.onclick = () => openMetricsSheet(r, true);
     const rdateEl = document.getElementById('in-rdate');
     if (rdateEl) {
       rdateEl.onchange = () => {
@@ -2737,7 +2774,7 @@
     const finBtn = document.getElementById('act-finish');
     if (finBtn) finBtn.onclick = () => {
       stopRest();
-      openFinishSheet(r);
+      openMetricsSheet(r, false);
     };
 
     const addEx = document.getElementById('act-add-ex');
@@ -3042,6 +3079,9 @@
   let statsExSel = null;       // progression tab: selected exercise name
   let statsPointSel = null;    // progression tab: selected point index
   let statsRange = '1m';       // 1w | 2w | 3w | 1m | 3m | 6m | 1y | all
+  // The muscle radar has its own default (#72): last week, so an ordinary
+  // week of training is the first thing the tab shows.
+  let muscleRange = '1w';
   let statsExType = 'line';         // progression: line | bar
   let statsExMetric = 'weight';     // progression: weight | reps
   let statsExMode = 'continuous';   // progression line: discrete | continuous
@@ -3182,22 +3222,6 @@
       : weekStart(d));
   }
 
-  // Start of the range immediately before the selected one, so the radar
-  // can overlay a comparison; null for all time (nothing to compare to).
-  function prevRangeStart(range, start) {
-    if (range === 'all' || !start) return null;
-    const d = new Date(start);
-    if (range === '1w') d.setDate(d.getDate() - 7);
-    else if (range === '2w') d.setDate(d.getDate() - 14);
-    else if (range === '3w') d.setDate(d.getDate() - 21);
-    else if (range === '1m') d.setMonth(d.getMonth() - 1);
-    else if (range === '3m') d.setMonth(d.getMonth() - 3);
-    else if (range === '6m') d.setMonth(d.getMonth() - 6);
-    else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
-    else d.setMonth(d.getMonth() - 3);
-    return d;
-  }
-
   // Human label of a range id, for radar legends and hints.
   function rangeWord(range) {
     if (range === '1w') return 'week';
@@ -3210,24 +3234,59 @@
     return '3 months';
   }
 
-  // Total volume per muscle category in [from, to); null bound = unbounded.
-  function volumeByCat(from, to) {
+  // Fixed day counts behind the radar's range labels (#72): rolling windows
+  // rather than calendar months keep the periods consistent and comparable.
+  const RADAR_RANGE_DAYS = {
+    '1w': 7, '2w': 14, '3w': 21, '1m': 30, '3m': 90, '6m': 180, '1y': 365,
+  };
+
+  function radarRangeDays(range) { return RADAR_RANGE_DAYS[range] || 90; }
+
+  // Inclusive rolling start of the radar range; null means all time.
+  function radarRangeStart(range) {
+    if (range === 'all') return null;
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    d.setDate(d.getDate() - radarRangeDays(range));
+    return d;
+  }
+
+  // Span of the selected window in weeks, used for the sets/week average.
+  // All time runs from the earliest counted workout to today.
+  function radarRangeWeeks(range, earliest) {
+    if (range !== 'all') return radarRangeDays(range) / 7;
+    if (!earliest) return 1;
+    return Math.max(1, (Date.now() - earliest) / 604800000);
+  }
+
+  // Weighted working sets per radar axis in [from, to); null = unbounded.
+  // Warm-ups and empty set rows are ignored. Primary muscles earn 1.0 set,
+  // secondary 0.5 (see GYMLOG_MUSCLE_WEIGHTS); cardio/core-only work adds
+  // to the set total but has no axis (#72).
+  function muscleSetTotals(from, to) {
     const totals = {};
+    GYMLOG_MUSCLE_AXES.forEach((m) => { totals[m] = 0; });
+    let sets = 0;
+    let workouts = 0;
+    let earliest = null;
     completedRoutines().forEach((r) => {
       const d = routineDate(r);
       if (!d) return;
       const t = d.getTime();
       if (from && t < from.getTime()) return;
       if (to && t >= to.getTime()) return;
+      workouts++;
+      if (earliest === null || t < earliest) earliest = t;
       r.exercises.forEach((ex) => {
-        const cat = gymlogCategoryOf(ex.name);
-        ex.sets.forEach((s) => {
-          const v = setVolumeKg(ex, s);
-          if (v > 0) totals[cat] = (totals[cat] || 0) + v;
-        });
+        const n = ex.sets.filter((s) => !s.warmup &&
+          (s.reps != null || s.weight != null || s.mins != null || s.dist != null)).length;
+        if (!n) return;
+        sets += n;
+        const w = gymlogMuscleWeights(ex.name);
+        Object.keys(w).forEach((m) => { totals[m] = (totals[m] || 0) + n * w[m]; });
       });
     });
-    return totals;
+    return { totals: totals, sets: sets, workouts: workouts, earliest: earliest };
   }
 
   function weekStart(d) {
@@ -3245,7 +3304,7 @@
 
   function fmtDay(iso) {
     const p = String(iso || '').split('-').map(Number);
-    if (p.length !== 3 || !p[0]) return String(iso);
+    if (p.length !== 3 || !p[0]) return esc(String(iso));
     return new Date(p[0], p[1] - 1, p[2])
       .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   }
@@ -3322,7 +3381,7 @@
 
   // Warm-up sets build no volume stats (same rule as the per-exercise live
   // stats and the progression chart) - setVolumeKg is the single choke point
-  // behind the radar, the heatmap, the Volume tab and the home pin.
+  // behind the Volume tab and the home volume pin.
   function setVolumeKg(ex, s) {
     if (s.warmup) return 0;
     if (s.reps == null || s.weight == null) return 0;
@@ -3577,51 +3636,67 @@
   }
 
   /* ---- heatmap tab ---- */
-
   function statsMusclesHTML() {
-    const start = rangeStart(statsRange);
-    const prevStart = prevRangeStart(statsRange, start);
-    const cur = volumeByCat(start, null);
-    const prev = prevStart ? volumeByCat(prevStart, start) : null;
-    const any = GYMLOG_CATS.some((c) =>
-      (cur[c] || 0) > 0 || (prev ? (prev[c] || 0) > 0 : false));
+    const start = radarRangeStart(muscleRange);
+    // The comparison window is the equally long period immediately before
+    // the selected one (both rolling, so the shapes line up) (#72).
+    const prevStart = start
+      ? new Date(start.getTime() - radarRangeDays(muscleRange) * 86400000)
+      : null;
+    const cur = muscleSetTotals(start, null);
+    const prev = prevStart ? muscleSetTotals(prevStart, start) : null;
+    const any = GYMLOG_MUSCLE_AXES.some((m) =>
+      (cur.totals[m] || 0) > 0 || (prev ? (prev.totals[m] || 0) > 0 : false));
     if (!any) {
-      return '<div class="card"><div class="empty">No completed workouts in this range.</div></div>';
+      return '<div class="card"><div class="empty">No strength working sets in this range.</div></div>';
     }
     return '<div class="opts-row">' + chartOptsBtn('btn-mus-opts') + '</div>' +
-      '<div class="card">' + radarInnerHTML(cur, prev, statsRange) + '</div>' +
-      '<p class="hint">Total volume by muscle group for the selected range (kg-normalized).' +
-      (prev ? ' Solid = selected range, dashed = the ' + rangeWord(statsRange) + ' before it.' : '') + '</p>';
+      '<div class="card">' + radarInnerHTML(cur, prev, muscleRange) + '</div>' +
+      '<p class="hint">Working sets by muscle group, weighted by primary (1) and ' +
+      'secondary (0.5) contribution. Each axis is scaled to the most-trained ' +
+      'group, so a week and a month stay comparable.' +
+      (prev ? ' Solid = selected range, dashed = the ' + rangeWord(muscleRange) + ' before it.' : '') +
+      '</p>';
   }
 
   function radarInnerHTML(cur, prev, range) {
     const curLabel = (STATS_RANGES.filter((x) => x.id === range)[0] || {}).label || 'selected range';
-    let max = 0;
-    GYMLOG_CATS.forEach((c) => {
-      max = Math.max(max, cur[c] || 0, prev ? prev[c] || 0 : 0);
-    });
-    return radarSVG(cur, prev) +
-      '<div class="radar-scale">Rings 25 / 50 / 75 / 100% \u00b7 scale 0 \u2013 ' +
-      fmtVolCompact(max) + ' kg</div>' +
-      (prev
+    const prevAny = prev && GYMLOG_MUSCLE_AXES.some((m) => (prev.totals[m] || 0) > 0);
+    const weeks = radarRangeWeeks(range, cur.earliest);
+    return radarSVG(cur.totals, prev ? prev.totals : null) +
+      '<div class="radar-scale">Rings 25 / 50 / 75 / 100% \u00b7 relative scale 0 \u2013 100% ' +
+      '(most-trained group = 100%)</div>' +
+      '<div class="radar-meta">' +
+      '<span><b>' + cur.sets + '</b> working sets</span>' +
+      '<span><b>' + cur.workouts + '</b> workouts</span>' +
+      '<span><b>' + fmt1(cur.sets / weeks) + '</b> sets/week avg</span>' +
+      '</div>' +
+      (prevAny
         ? '<div class="cell-detail rlegend"><span class="rkey rkey-cur"></span>' + curLabel +
           '<span class="rkey rkey-prev"></span>previous ' + rangeWord(range) + '</div>'
         : '');
   }
 
   function radarSVG(cur, prev) {
-    const cats = GYMLOG_CATS.filter((c) =>
+    const cats = GYMLOG_MUSCLE_AXES.filter((c) =>
       (cur[c] || 0) > 0 || (prev ? (prev[c] || 0) > 0 : false));
     const n = cats.length;
+    if (!n) return '';
     const W = 320, H = 270, cx = W / 2, cy = H / 2;
     const R = Math.min(W, H) / 2 - 30;
-    let max = 0;
-    cats.forEach((c) => {
-      max = Math.max(max, cur[c] || 0, prev ? prev[c] || 0 : 0);
-    });
+    // Normalize each shape by its own highest axis ("distribution, not
+    // absolute volume"): the biggest trained group fills the outer ring.
+    // The previous period is normalized the same way so the overlay stays
+    // readable even after a much heavier month (#72).
+    const maxOf = (totals) => totals
+      ? Math.max.apply(null, GYMLOG_MUSCLE_AXES.map((c) => totals[c] || 0))
+      : 0;
+    const curMax = maxOf(cur);
+    const prevMax = maxOf(prev);
     const ang = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
-    const pt = (i, v) => {
-      const r = R * (max ? v / max : 0);
+    const pt = (i, v, max) => {
+      const pct = max ? Math.min(100, Math.max(0, (v / max) * 100)) : 0;
+      const r = R * (pct / 100);
       return (cx + r * Math.cos(ang(i))).toFixed(1) + ',' + (cy + r * Math.sin(ang(i))).toFixed(1);
     };
     const rings = [0.25, 0.5, 0.75, 1].map((f) =>
@@ -3630,22 +3705,22 @@
       '<line class="rspoke" x1="' + cx + '" y1="' + cy + '" x2="' +
       (cx + R * Math.cos(ang(i))).toFixed(1) + '" y2="' + (cy + R * Math.sin(ang(i))).toFixed(1) + '"/>').join('');
     const labels = cats.map((c, i) =>
-      '<text class="rlbl' + ((cur[c] || 0) > 0 ? '' : ' off') + '" x="' +
+      '<text class="rlbl' + ((cur[c] || 0) > 0 || (prev && (prev[c] || 0) > 0) ? '' : ' off') + '" x="' +
       (cx + (R + 16) * Math.cos(ang(i))).toFixed(1) + '" y="' +
       (cy + (R + 16) * Math.sin(ang(i))).toFixed(1) + '" text-anchor="middle">' + esc(c) + '</text>').join('');
-    return '<svg class="radarsvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Volume by muscle group">' +
+    return '<svg class="radarsvg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Working sets by muscle group">' +
       rings + spokes +
-      (prev && cats.some((c) => (prev[c] || 0) > 0)
-        ? '<polygon class="rprev" points="' + cats.map((c, i) => pt(i, prev[c] || 0)).join(' ') + '"/>'
+      (prev && prevMax && cats.some((c) => (prev[c] || 0) > 0)
+        ? '<polygon class="rprev" points="' + cats.map((c, i) => pt(i, prev[c] || 0, prevMax)).join(' ') + '"/>'
         : '') +
-      '<polygon class="rcur" points="' + cats.map((c, i) => pt(i, cur[c] || 0)).join(' ') + '"/>' +
+      '<polygon class="rcur" points="' + cats.map((c, i) => pt(i, cur[c] || 0, curMax)).join(' ') + '"/>' +
       labels +
       '</svg>';
   }
 
   function musOptsGroups() {
     return [
-      rangeOptsGroup(statsRange),
+      rangeOptsGroup(muscleRange),
       { label: 'Home', items: [{ key: 'pin', label: 'Pin to Home' }] },
     ];
   }
@@ -3653,7 +3728,7 @@
   function applyMusOpt(k) {
     const kind = k.split(':')[0];
     const val = k.slice(kind.length + 1);
-    if (kind === 'range') setStatsRange(val);
+    if (kind === 'range') muscleRange = val;
     else if (kind === 'pin') pinCurrentChart();
     render();
   }
@@ -4215,7 +4290,7 @@
       tab: statsTab, ex: statsExSel,
       exType: statsExType, exMode: statsExMode, exMetric: statsExMetric,
       volType: statsVolType, volMode: statsVolMode,
-      range: statsRange,
+      range: statsTab === 'heatmap' ? muscleRange : statsRange,
     };
     homeSel = { point: null, key: null };
     store.setSetting('homeChart', settings.homeChart)
@@ -4259,13 +4334,15 @@
       return volumeChartHTML(data, selKey, cfg.volType, cfg.volMode) +
         volumeBreakdownHTML(data, selKey);
     }
-    const start = rangeStart(cfg.range);
-    const prevStart = prevRangeStart(cfg.range, start);
-    const cur = volumeByCat(start, null);
-    const prev = prevStart ? volumeByCat(prevStart, start) : null;
-    const any = GYMLOG_CATS.some((c) =>
-      (cur[c] || 0) > 0 || (prev ? (prev[c] || 0) > 0 : false));
-    if (!any) return '<div class="empty">No completed workouts in this range.</div>';
+    const start = radarRangeStart(cfg.range);
+    const prevStart = start
+      ? new Date(start.getTime() - radarRangeDays(cfg.range) * 86400000)
+      : null;
+    const cur = muscleSetTotals(start, null);
+    const prev = prevStart ? muscleSetTotals(prevStart, start) : null;
+    const any = GYMLOG_MUSCLE_AXES.some((m) =>
+      (cur.totals[m] || 0) > 0 || (prev ? (prev.totals[m] || 0) > 0 : false));
+    if (!any) return '<div class="empty">No strength working sets in this range.</div>';
     // A pre-1.15.0 pin may still say view 'heat': the heatmap is gone,
     // so every muscles pin renders the radar.
     return radarInnerHTML(cur, prev, cfg.range);
@@ -5338,7 +5415,14 @@
       programs = Array.isArray(v) ? v.map(sanitizeProgram).filter(Boolean) : [];
     })
     .then(() => store.all())
-    .then((rows) => { routines = rows || []; })
+    // Defence in depth (#SEC-01): import sanitizes, but a record written by
+    // an older/foreign context (or a rolled-back DB) is re-sanitized on
+    // load, so render never interpolates unvalidated fields.
+    .then((rows) => {
+      routines = (rows || [])
+        .filter((r) => r && typeof r === 'object' && !Array.isArray(r))
+        .map(sanitizeRoutine);
+    })
     .then(() => {
       try { history.replaceState({ view: { name: 'home' } }, ''); } catch (err) {}
     })
