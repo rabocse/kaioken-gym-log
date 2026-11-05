@@ -8,6 +8,17 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.18.1] - 2026-11-05
+
+### Fixed
+- The weekly muscle chip now counts direct working sets for the exercise's
+  primary muscle (no 0.5 secondary credit), so it always shows whole sets
+  (for example "Chest 13 sets/wk"). The Muscles radar keeps the weighted
+  view.
+- Empty set rows in the routine being edited now count immediately, so
+  tapping + moves the weekly number while planning. Finished workouts
+  still add only sets with logged data, and warm-ups remain excluded.
+
 ## [1.18.0] - 2026-11-05
 
 ### Added

@@ -21,9 +21,11 @@ stays on your phone.
   distance (km or mi) instead of reps × weight.
 - Warm-up sets group above your working sets and are excluded from PRs and
   volume stats.
-- Live per-exercise stats (Volume, Reps, average weight) and a weekly muscle
-  counter next to the set count — for example "Chest 12/wk", including
-  finished workouts and the routine you are logging.
+- Live per-exercise stats (Volume, Reps, average weight) and a weekly direct
+  working-set counter next to the set count — for example "Chest 13 sets/wk".
+  It counts the routine you are editing (empty planned rows included) plus
+  finished workouts in that Monday-Sunday week; warm-ups are excluded. The
+  Muscles radar remains weighted (1.0 primary / 0.5 secondary).
 - Start a workout for the elapsed timer; cards fold to slim headers so you
   focus on the current exercise and unfold the next when you finish its sets.
 - Tap a set to mark it done. The set circle turns into a golden flame the
@@ -142,7 +144,7 @@ Go is only a local development helper (dev server + icon generator).
 ### Verify before pushing
 
 The browser harness in `tests/` loads the real app, drives it like a user and
-checks the DOM, charts, CSP, storage and the share card (110 checks). It is
+checks the DOM, charts, CSP, storage and the share card (111 checks). It is
 dev-only tooling: nothing under `tests/` is published.
 
 Requires Node 20+ (once: `npm ci && npx playwright install chromium`):

@@ -311,7 +311,7 @@
     B('new-ex-unit', !!card2.querySelector('.set-row .in-weight') && !!card2.querySelector('.set-row .in-reps'),
       'weight+reps inputs');
     var wkChip = card2.querySelector('.wk-chip');
-    B('new-week-chip', !!wkChip && txt(wkChip) === 'Chest 0/wk',
+    B('new-week-chip', !!wkChip && txt(wkChip) === 'Chest 1 set/wk',
       wkChip ? txt(wkChip) : 'missing chip');
 
     phase(2);
@@ -330,25 +330,28 @@
     B('wo-unfold', qa('.ex-card.folded').length === 0, 'cards folded: ' + qa('.ex-card.folded').length);
 
     var row = q('.ex-card[data-eid] .set-row');
+    var wk1 = q('.ex-card[data-eid] .wk-chip');
+    B('wo-week-chip-empty', !!wk1 && txt(wk1) === 'Chest 1 set/wk', wk1 ? txt(wk1) : 'missing chip');
+
+    // An empty planned row must move the count immediately - no values were
+    // entered yet, but there are now two sets for chest this week.
+    click(q('.ex-card[data-eid] .btn-add-set'));
+    await until(function () { return qa('.ex-card[data-eid] .set-row').length === 2; }, 6000, 'second set');
+    B('wo-add-set', qa('.ex-card[data-eid] .set-row').length === 2, '2 rows');
+    var wk2 = q('.ex-card[data-eid] .wk-chip');
+    B('wo-week-chip-empty-add', !!wk2 && txt(wk2) === 'Chest 2 sets/wk', wk2 ? txt(wk2) : 'missing chip');
+
+    row = q('.ex-card[data-eid] .set-row');
     setVal(row.querySelector('.in-weight'), '100');
     setVal(row.querySelector('.in-reps'), '5');
     await sleep(80);
     B('wo-log-values', row === q('.ex-card .set-row') && !!row,
       'values typed');
-
-    var wk1 = q('.ex-card[data-eid] .wk-chip');
-    B('wo-week-chip-live', !!wk1 && txt(wk1) === 'Chest 1/wk', wk1 ? txt(wk1) : 'missing chip');
+    var wk3 = q('.ex-card[data-eid] .wk-chip');
+    B('wo-week-chip-typed', !!wk3 && txt(wk3) === 'Chest 2 sets/wk', wk3 ? txt(wk3) : 'missing chip');
 
     var stats = qa('.ex-card[data-eid] .ex-stats b').map(txt);
     B('wo-ex-stats', stats.length === 3 && stats[0].indexOf('500') === 0, 'stats: ' + JSON.stringify(stats));
-
-    // The rest timer only starts when another set is still pending, so add
-    // one before marking the first done.
-    click(q('.ex-card[data-eid] .btn-add-set'));
-    await until(function () { return qa('.ex-card[data-eid] .set-row').length === 2; }, 6000, 'second set');
-    B('wo-add-set', qa('.ex-card[data-eid] .set-row').length === 2, '2 rows');
-    var wk2 = q('.ex-card[data-eid] .wk-chip');
-    B('wo-week-chip-add', !!wk2 && txt(wk2) === 'Chest 2/wk', wk2 ? txt(wk2) : 'missing chip');
 
     var check = q('.ex-card[data-eid] .set-row .set-check');
     click(check);
@@ -364,8 +367,8 @@
     click(qa('.ex-card[data-eid] .set-row')[1].querySelector('.btn-del-set'));
     await until(function () { return qa('.ex-card[data-eid] .set-row').length === 1; }, 6000, 'set removed');
     B('wo-del-set', qa('.ex-card[data-eid] .set-row').length === 1, '1 row');
-    var wk3 = q('.ex-card[data-eid] .wk-chip');
-    B('wo-week-chip-del', !!wk3 && txt(wk3) === 'Chest 1/wk', wk3 ? txt(wk3) : 'missing chip');
+    var wk4 = q('.ex-card[data-eid] .wk-chip');
+    B('wo-week-chip-del', !!wk4 && txt(wk4) === 'Chest 1 set/wk', wk4 ? txt(wk4) : 'missing chip');
 
     click(byId('act-add-ex'));
     var cards = await until(function () {

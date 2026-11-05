@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.18.0';
+  const APP_VERSION = '1.18.1';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -2639,12 +2639,12 @@
         activeOpenEx = null;
       }
     }
-    // Weekly muscle baseline from completed workouts in the routine's
-    // week, plus this routine's own logged sets.
-    const weekBase = weekMuscleBase(routineDate(r));
+    // Weekly muscle baseline from finished workouts in the routine's week,
+    // plus every planned/logged row in this routine.
+    const weekBase = weekDirectSets(routineDate(r));
     const weekTotals = {};
     GYMLOG_MUSCLE_AXES.forEach((m) => { weekTotals[m] = weekBase[m] || 0; });
-    const liveSets = routineMuscleTotals(r);
+    const liveSets = routineDirectSets(r);
     GYMLOG_MUSCLE_AXES.forEach((m) => { weekTotals[m] += liveSets[m] || 0; });
     const exCards = r.exercises.map((ex) =>
       exerciseCardHTML(ex, editable, activeView, editable && r.exercises.length > 1, weekTotals)).join('');
@@ -2801,9 +2801,10 @@
       if (names.length) names[names.length - 1].focus();
     };
 
-    // Live chip refresh: update the text in place so typing keeps focus.
+    // Update the chip after a name change: the primary muscle or its weekly
+    // count can change. Values typed into a set do not affect the count.
     const refreshWeekChips = () => {
-      const live = routineMuscleTotals(r);
+      const live = routineDirectSets(r);
       const merged = {};
       GYMLOG_MUSCLE_AXES.forEach((m) => { merged[m] = (weekBase[m] || 0) + (live[m] || 0); });
       $app.querySelectorAll('.ex-card[data-eid]').forEach((card) => {
@@ -2817,18 +2818,15 @@
           meta.classList.remove('has-wk');
           return;
         }
-        const n = fmtWeekSets(merged[primary] || 0);
         if (!chip) {
           chip = document.createElement('span');
           chip.className = 'wk-chip';
           meta.insertBefore(chip, meta.querySelector('.muted-small'));
         }
-        if (chip.dataset.muscle !== primary) {
-          chip.dataset.muscle = primary;
-          chip.innerHTML = esc(primary) + ' <b></b>/wk';
-        }
-        const b = chip.querySelector('b');
-        if (b) b.textContent = n;
+        const n = fmtWeekSets(merged[primary] || 0);
+        chip.dataset.muscle = primary;
+        chip.innerHTML = esc(primary) + ' <b>' + n + '</b> ' +
+          (n === '1' ? 'set/wk' : 'sets/wk');
         chip.title = weekChipTitle(primary, n);
         meta.classList.add('has-wk');
       });
@@ -2982,7 +2980,6 @@
           minsIn.addEventListener('input', () => {
             set.mins = numOrNull(minsIn.value);
             scheduleSave(r);
-            refreshWeekChips();
           });
           minsIn.addEventListener('blur', () => {
             const n = numOrNull(minsIn.value);
@@ -2991,7 +2988,6 @@
           distIn.addEventListener('input', () => {
             set.dist = numOrNull(distIn.value);
             scheduleSave(r);
-            refreshWeekChips();
           });
           distIn.addEventListener('blur', () => {
             const n = numOrNull(distIn.value);
@@ -3022,7 +3018,6 @@
             applyCardPR();
             updateExStats();
             refreshPRGhost();
-            refreshWeekChips();
           });
           wtIn.addEventListener('input', () => {
             set.weight = numOrNull(wtIn.value);
@@ -3030,7 +3025,6 @@
             applyCardPR();
             updateExStats();
             refreshPRGhost();
-            refreshWeekChips();
           });
           wtIn.addEventListener('blur', () => {
             const n = numOrNull(wtIn.value);
@@ -3345,10 +3339,12 @@
       (s.reps != null || s.weight != null || s.mins != null || s.dist != null);
   }
 
-  // Per-exercise live chip: the primary muscle's weighted working-set
-  // count for the Monday-Sunday week containing the routine's date. Completed
-  // routines in that week are the baseline; the routine being edited adds its
-  // own logged sets on top so the number moves while you type.
+  // Per-exercise chip: direct working sets for the primary muscle in the
+  // Monday-Sunday week containing the routine's date. Finished workouts add
+  // only sets with logged data; the routine being edited adds every non-warm-up
+  // row (empty planned rows included) so the number moves as sets are added.
+  // Deliberately unweighted: 1 set = 1 on the primary muscle only. The Muscles
+  // radar keeps the 1.0 / 0.5 weighting.
   function weekWindow(anchor) {
     const d = (anchor instanceof Date && !isNaN(anchor.getTime())) ? anchor : new Date();
     const start = weekStart(d);
@@ -3356,19 +3352,31 @@
     return { start: start, end: end };
   }
 
-  function weekMuscleBase(anchor) {
+  function weekDirectSets(anchor) {
     const win = weekWindow(anchor);
-    return muscleSetTotals(win.start, win.end).totals;
+    const totals = {};
+    GYMLOG_MUSCLE_AXES.forEach((m) => { totals[m] = 0; });
+    completedRoutines().forEach((r) => {
+      const d = routineDate(r);
+      if (!d || d < win.start || d >= win.end) return;
+      r.exercises.forEach((ex) => {
+        const m = primaryMuscleOf(ex);
+        if (!m) return;
+        const n = ex.sets.filter(hasWorkingSetData).length;
+        if (n) totals[m] += n;
+      });
+    });
+    return totals;
   }
 
-  function routineMuscleTotals(r) {
+  function routineDirectSets(r) {
     const totals = {};
     GYMLOG_MUSCLE_AXES.forEach((m) => { totals[m] = 0; });
     (r ? r.exercises : []).forEach((ex) => {
-      const n = ex.sets.filter(hasWorkingSetData).length;
-      if (!n) return;
-      const w = gymlogMuscleWeights(ex.name);
-      Object.keys(w).forEach((m) => { totals[m] = (totals[m] || 0) + n * w[m]; });
+      const m = primaryMuscleOf(ex);
+      if (!m) return;
+      const n = ex.sets.filter((s) => !s.warmup).length;
+      if (n) totals[m] += n;
     });
     return totals;
   }
@@ -3387,13 +3395,12 @@
   }
 
   function fmtWeekSets(n) {
-    const v = Math.round((Number(n) || 0) * 2) / 2;
-    return Number.isInteger(v) ? String(v) : v.toFixed(1);
+    return String(Math.max(0, Math.round(Number(n) || 0)));
   }
 
   function weekChipTitle(muscle, n) {
-    return muscle + ': ' + n + ' weighted working set' + (n === '1' ? '' : 's') +
-      ' this week (Mon-Sun; this routine included).';
+    return muscle + ': ' + n + ' direct working set' + (n === '1' ? '' : 's') +
+      ' this week (Mon-Sun). Finished workouts and this routine; warm-ups excluded.';
   }
 
   function weekChipHTML(muscle, count) {
@@ -3401,7 +3408,7 @@
     const n = fmtWeekSets(count);
     return '<span class="wk-chip" data-muscle="' + esc(muscle) +
       '" title="' + esc(weekChipTitle(muscle, n)) + '">' +
-      esc(muscle) + ' <b>' + n + '</b>/wk</span>';
+      esc(muscle) + ' <b>' + n + '</b> ' + (n === '1' ? 'set/wk' : 'sets/wk') + '</span>';
   }
 
   function weekStart(d) {
