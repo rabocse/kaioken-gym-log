@@ -1,131 +1,101 @@
 # Kaioken
 
-A minimalist gym routine tracker, as an installable Progressive Web App (PWA).
-No App Store, no account, no server — your data stays on your phone.
+A minimalist gym routine tracker, as an installable Progressive Web App (PWA)
+for **iPhone and Android**. No App Store, no account, no server — your data
+stays on your phone.
+
+> **Support the project.** Kaioken is free and ad-free, with no account or
+> subscription. If it earns a place in your training, you can
+> [buy me a coffee](https://buymeacoffee.com/rabocse). Bug reports and pull
+> requests are equally welcome.
 
 ## Features
 
-- Create a routine for today, or schedule it for a future date
-- Add exercises freely (with common-name autocomplete)
-- Hold an exercise card and drag it to reorder your exercises
-- Cardio exercises from the catalog (Running, Treadmill, Cycling, ...) log minutes and distance (km or mi) instead of reps × weight
-- Per exercise: any number of sets, reps per set, weight per set
-- Weight unit (kg / lb) is chosen **per exercise** — mix freely within one routine
-- Warm-up sets: a Warm up button adds warm-ups that group above your working
-  sets (new ones append below the last warm-up and copy its values); marked
-  with a thermometer icon and excluded from PRs and volume stats
-- Live per-exercise stats: Volume, Reps and average weight under each
-  exercise, updating as you type
-- Weekly muscle counter: each exercise card shows the primary muscle's
-  weighted working-set count for that Monday-Sunday week next to the set
-  counter (for example "Chest 12/wk"), including finished workouts and the
-  routine you are logging; updates as you type
-- Start a workout to start the timer (a compact one-line elapsed box);
-  finish it to record the duration
-- During a workout: exercises fold to slim headers so you focus on one; all start folded - unfold the one you are on, and finishing its sets folds it and unfolds the next
-- Tap a set to mark it done (green check + highlight); tap again to undo
-- Personal records: the set circle turns into a golden flame the moment its typed values would beat your best (estimated 1RM, warm-ups excluded); marking it done toasts a new PR and keeps the golden highlight
-- Automatic rest countdown after each completed set (1 / 1.5 / 2 min, configurable in Settings)
-- On finishing a workout: a creatine/protein check-in (yes/no switch) and an optional body-weight entry, saved with the routine
-- Eleven color themes (dark, OLED, mono, nord, ocean, forest, violet, ember, ruby, light, paper), switchable in Settings
-- Kaioken theme: runs cold and heats up (Kaio-ken ×1–×20) with your last 7 days of training — the Home heading itself is bigger and warms from white toward red as you train
-- Background styles (Settings): subtle generated texture, or one of your own photos (stored on-device, offline, theme-tinted, Fill or Fit), with frosted cards
-- Exercise categories auto-tagged from the built-in catalog (chest, back, legs, ...)
-- Stats screen, three tabs — every graph has a time range (Last week, 2
-  weeks, 3 weeks, month, 3 months, 6 months, Last year, All time) and all
-  its options (chart type, style, range) behind one compact button that
-  opens a bottom sheet:
-  - Progression: per-exercise per-session series, spaced by actual date —
-    **top set weight** (heaviest working set, warm-ups excluded) or
-    **total working reps**, Line or Bar, Discrete dots or Continuous
-    curve with area fill
-  - Muscles: training volume by muscle group as a **radar chart** (the
-    previous equal range overlaid dashed for comparison, ring scale
-    labeled)
-  - Volume: weekly (or monthly) totals as stacked bars by muscle group or
-    a line/area trend; tap a column or point for the breakdown
-  - Every value chart shows a Y axis with round tick labels that rescale
-    to the data (unit on the top tick; the bar chart's gutter lines up
-    with the bars)
-- Pin any chart to Home from its options sheet: it stays interactive
-  there, its options sheet edits and persists the pin, and tapping its
-  title opens Stats on that graph
-- Body composition (Settings): height, weight, neck, waist and hip (for
-  women) with a live US Navy body-fat estimate plus fat/lean mass — kept
-  current by workout logging, and you choose which metrics are prompted
-  when a workout finishes
-- Goals (Settings): weekly/monthly/yearly workout targets, weekly/monthly
-  creatine/protein day targets (counted per day, not per workout),
-  body-weight (kg/lb), waist (cm/in) and body-fat (%) targets — shown as
-  progress bars with percentages in a reorderable Home section;
-  measurement goals track the value from Body composition from the day
-  the target was set, on bars labeled with their start and target values,
-  and the body-fat bar is a segmented scale of the five standard
-  Navy-method categories (essential, athletes, fitness, average, obese —
-  sex-specific ranges) with your current and target positions marked
-- Programs: group routine templates under one name (New Program on Home,
-  or Add to Program from any routine's action sheet); a program card shows
-  its routines, the next one up and a done/total chip for the week, and
-  tapping a routine inside schedules it for today
-- Every home section (calendar, goals, pinned chart, New Routine +
-  New Program, programs, Active, Scheduled, History) is hold-and-drag
-  reorderable; the layout persists
-- Rename, repeat or delete any workout (scheduled, active or past) by holding it (or right-clicking): long-press action sheet — or the ⋯ button in the routine view
-- Share a finished routine as an image highlight: a 1080×1350 card in your
-  theme (top sets, PRs, volume) via the system share sheet, with a
-  Save image / Copy text fallback where files cannot be shared
-- Change a scheduled or active routine's date from the routine view (completed workouts keep their date)
-- Back button / swipe-back work: navigation pushes history instead of exiting the PWA
-- History of completed routines grouped by month (collapsible); past workouts are dimmed
-- Home: a compact last-7-days calendar strip with a dot on each day you finished a workout (the same 7 days the Kaioken theme watches); tap it to unfold the full month
-- Exercise and routine name autocomplete (in-app picker; iOS ignores <datalist>)
-- Named Kaioken — installs and displays as "Kaioken"
-- Works fully offline (service worker + on-device storage)
-- Strict CSP (no inline styles, no third-party sources) and cross-origin
-  embedding is blocked
-- Backup / restore everything (routines, programs, goals) as JSON (in Settings)
+### Logging
 
-## Run locally (development)
+- Create a routine for today or schedule it for a future date; hold and drag
+  exercises — and every Home section — into the order you want.
+- Add exercises freely (built-in autocomplete), any number of sets, reps and
+  weight per set. Weight unit (kg / lb) is chosen **per exercise**.
+- Cardio exercises (Running, Treadmill, Cycling, ...) log minutes and
+  distance (km or mi) instead of reps × weight.
+- Warm-up sets group above your working sets and are excluded from PRs and
+  volume stats.
+- Live per-exercise stats (Volume, Reps, average weight) and a weekly muscle
+  counter next to the set count — for example "Chest 12/wk", including
+  finished workouts and the routine you are logging.
+- Start a workout for the elapsed timer; cards fold to slim headers so you
+  focus on the current exercise and unfold the next when you finish its sets.
+- Tap a set to mark it done. The set circle turns into a golden flame the
+  moment your typed values would beat your best, and an automatic rest
+  countdown starts (1 / 1.5 / 2 min, configurable).
+- On finishing: a creatine/protein check-in and an optional body-weight entry,
+  saved with the routine.
 
-Requires Go:
+### Progress
 
-    go run .            # dev server on http://localhost:8080
-    go run . icons      # regenerate the app icons
+- History grouped by month, a 7-day calendar strip on Home, and a Kaioken
+  theme that runs cold and heats up with your last 7 days of training.
+- Stats screen with eight time ranges (last week through all time):
+  - Progression: top-set weight or total working reps, line or bars.
+  - Muscles: a weighted nine-axis radar comparing the previous equal range.
+  - Volume: weekly/monthly totals by muscle group, with a tap-through breakdown.
+- Pin any chart to Home; it stays interactive and its options persist.
+- Goals for workouts (week/month/year), creatine/protein days, body weight,
+  waist and body fat, shown as progress bars on Home.
+- Body composition: height, weight, neck, waist and hip with a live US Navy
+  body-fat estimate plus fat/lean mass.
 
-Go is only a local development helper (dev server + icon generator).
-The app itself is pure static files — there is no backend.
+### Programs, sharing, data
 
-### Verify before pushing
+- Programs group routine templates under one name, show the next workout and
+  a done/total chip for the week; tap a routine to schedule it for today.
+- Share a finished routine as a themed 1080×1350 image (top sets, PRs, volume)
+  through the system share sheet, with Save image / Copy text fallbacks.
+- Rename, repeat or delete any workout; change a scheduled or active
+  routine's date from the routine view.
+- Back up and restore everything (routines, programs, goals, settings) as JSON
+  from Settings.
 
-The browser harness in `tests/` loads the real app, drives it like a user and
-checks the DOM, charts, CSP, storage and the share card (110 checks). It is
-dev-only tooling: nothing under `tests/` is published.
+### Look and feel
 
-Requires Node 20+ (once: `npm ci && npx playwright install chromium`):
+- Eleven themes: dark, OLED, mono, nord, ocean, forest, violet, ember, ruby,
+  light, paper.
+- Generated background textures, or one of your own photos (stored on-device,
+  offline, theme-tinted, Fill or Fit) with frosted cards.
+- Works fully offline; strict CSP with no third-party sources, and cross-origin
+  embedding is blocked.
+- Back button / swipe-back navigate the app instead of exiting the PWA.
 
-    npm run verify      # syntax gate + the full harness
+## Install on your phone
 
-That is the exact command CI runs before the GitHub Pages deploy, so a green
-local run means the deploy will not be blocked. See `tests/README.md` for the
-check inventory and how to add one.
+Kaioken is a PWA, so it must be served over **HTTPS**. The easiest free option
+is GitHub Pages.
 
-## Put it on your iPhone
-
-The PWA must be served over **HTTPS**. Easiest free option — GitHub Pages:
+### Host it
 
 1. Create a repository (e.g. `gymlog`) and push this project to it.
 2. Repo settings: **Pages** → Deploy from a branch → `main` / `(root)`.
 3. Your app is now at `https://<user>.github.io/<repo>/`.
 
-(Any static HTTPS host works: Cloudflare Pages, Netlify, etc. Just upload
-this project's files as-is.)
+Any static HTTPS host works too (Cloudflare Pages, Netlify, ...): upload this
+project's files as-is.
 
-Then, on the iPhone:
+### iPhone / iPad
 
 1. Open the URL in Safari.
 2. Tap **Share → Add to Home Screen**.
-3. Kaioken appears as an icon and opens full-screen like a native app. It
-   works offline.
+3. Kaioken appears as an icon and opens full-screen like a native app.
+
+### Android
+
+1. Open the URL in Chrome (Edge and Samsung Internet work too).
+2. Open the browser menu (**⋮**) → **Install app** (in Chrome) or
+   **Add to Home screen**.
+3. Kaioken appears in your launcher and opens full-screen like a native app.
+
+The icons are maskable, so Android adapts them to your launcher's shape. On
+both platforms the app works offline once installed.
 
 ## How updates work
 
@@ -138,21 +108,49 @@ the second gets fresh files.
 
 ## Where does my data live?
 
-On the phone itself (IndexedDB in Safari's app storage). Why this beats a
-hosted database for this app:
+On the phone itself — IndexedDB in your browser's app storage (Safari on iOS,
+Chrome on Android). Why this beats a hosted database for this app:
 
 - It works with zero signal in the gym.
 - No server to run, secure, or pay for. No accounts, no auth.
 - Private by default.
 
 The trade-off: the data is tied to the device. iOS can evict the storage of
-web apps left unused for a long time, and a lost phone means lost history.
-Mitigation: open **Settings** (gear icon, top right) every few weeks, copy
-the JSON export somewhere safe, and Import it if you ever need to restore.
+web apps left unused for a long time; Android clears it if you clear the
+site's data. A lost phone means lost history. Mitigation: open **Settings**
+(gear icon, top right) every few weeks, copy the JSON export somewhere safe,
+and Import it if you ever need to restore.
 
 If you later want multi-device sync or stronger durability, a small
-Go + SQLite backend can sit behind the same UI — the data model in
-`js/app.js` is a plain JSON structure that is easy to sync.
+Go + SQLite backend can sit behind the same UI — the data model in `js/app.js`
+is a plain JSON structure that is easy to sync.
+
+## Development
+
+See [tests/README.md](tests/README.md) for the check inventory and how to add
+one. The app itself is pure static files — there is no backend.
+
+### Run locally
+
+Requires Go:
+
+    go run .            # dev server on http://localhost:8080
+    go run . icons      # regenerate the app icons
+
+Go is only a local development helper (dev server + icon generator).
+
+### Verify before pushing
+
+The browser harness in `tests/` loads the real app, drives it like a user and
+checks the DOM, charts, CSP, storage and the share card (110 checks). It is
+dev-only tooling: nothing under `tests/` is published.
+
+Requires Node 20+ (once: `npm ci && npx playwright install chromium`):
+
+    npm run verify      # syntax gate + the full harness
+
+That is the exact command CI runs before the GitHub Pages deploy, so a green
+local run means the deploy will not be blocked.
 
 ## Project layout
 
@@ -175,8 +173,3 @@ Go + SQLite backend can sit behind the same UI — the data model in
 
 - Per-exercise history ("retrieve from log")
 - Optional Go + SQLite sync backend
-
-## Say thanks
-
-If Kaioken saves you a subscription and you want to say thanks, you can
-buy the author a coffee: <https://buymeacoffee.com/rabocse>
