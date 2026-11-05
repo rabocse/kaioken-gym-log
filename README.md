@@ -16,6 +16,10 @@ No App Store, no account, no server — your data stays on your phone.
   with a thermometer icon and excluded from PRs and volume stats
 - Live per-exercise stats: Volume, Reps and average weight under each
   exercise, updating as you type
+- Weekly muscle counter: each exercise card shows the primary muscle's
+  weighted working-set count for that Monday-Sunday week next to the set
+  counter (for example "Chest 12/wk"), including finished workouts and the
+  routine you are logging; updates as you type
 - Start a workout to start the timer (a compact one-line elapsed box);
   finish it to record the duration
 - During a workout: exercises fold to slim headers so you focus on one; all start folded - unfold the one you are on, and finishing its sets folds it and unfolds the next
@@ -94,7 +98,7 @@ The app itself is pure static files — there is no backend.
 ### Verify before pushing
 
 The browser harness in `tests/` loads the real app, drives it like a user and
-checks the DOM, charts, CSP, storage and the share card (105 checks). It is
+checks the DOM, charts, CSP, storage and the share card (110 checks). It is
 dev-only tooling: nothing under `tests/` is published.
 
 Requires Node 20+ (once: `npm ci && npx playwright install chromium`):

@@ -8,6 +8,16 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.18.0] - 2026-11-05
+
+### Added
+- Weekly muscle counter while logging: every exercise card shows the
+  primary muscle's weighted working-set count for that Monday-Sunday week
+  next to the set counter (for example "Chest 12/wk"). It includes
+  completed workouts in the week plus the routine being edited, updates
+  while you type, excludes warm-ups and empty rows, and follows the same
+  1.0 primary / 0.5 secondary weighting as the Muscles radar.
+
 ## [1.17.0] - 2026-11-05
 
 ### Added
