@@ -17,7 +17,7 @@ const ARTIFACTS = path.join(__dirname, '..', 'test-results');
 
 const DRIVER_TIMEOUT_MS = 240000;
 const MIN_CHECKS = 70;
-const PHASES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+const PHASES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13'];
 
 const results = [];
 

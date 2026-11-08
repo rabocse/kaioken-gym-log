@@ -561,6 +561,64 @@ body.has-rest #app { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   background: var(--accent);
 }
 
+/* ---------- week planner ---------- */
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.week-nav-label { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.seg-week-mode { display: flex; margin: 12px 0; }
+.seg-week-mode button { flex: 1; min-height: 40px; }
+.btn-week-pin.on { color: var(--accent); }
+.week-total { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.week-total-head { font-weight: 600; font-size: 14px; margin-right: 4px; }
+.week-day { margin-bottom: 8px; padding: 12px 14px; }
+.week-day.today { border-color: var(--accent-border); background: var(--accent-soft); }
+.week-day-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.week-day-name { font-weight: 600; font-size: 15px; flex: 1; }
+.week-day-right { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.week-day-body .empty-inline { display: block; padding: 2px 0; }
+.week-day-body .item { margin-bottom: 8px; }
+.week-day-body .item:last-child { margin-bottom: 0; }
+.week-ex-list { white-space: normal; line-height: 1.45; }
+.wk-mus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.wk-mus b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.wk-mus-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.week-day-body { display: flex; flex-wrap: wrap; gap: 6px; }
+.week-day-body .item { width: 100%; }
+
+/* Home pin: one compact row per weekday */
+.home-week { padding: 12px 14px; }
+.home-week .chart-head { margin-bottom: 6px; }
+.hw-day {
+  display: grid;
+  grid-template-columns: 42px 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+}
+.hw-day.today { background: var(--accent-soft); }
+.hw-name { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.hw-date { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hw-day.today .hw-name, .hw-day.today .hw-date { color: var(--text); }
+.hw-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.hw-rest { color: var(--muted); font-size: 12px; }
+.hw-total { font-size: 12.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
 /* ---------- misc text ---------- */
 .banner {
   background: var(--accent-soft);

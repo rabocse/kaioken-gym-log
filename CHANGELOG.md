@@ -8,6 +8,21 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.19.0] - 2026-11-08
+
+### Added
+- Week planner: a Monday-Sunday calendar of everything dated in a week,
+  opened from the Home topbar or straight from the routine editor (Back
+  returns to the routine you were building). Routines mode lists each
+  day's routines with their exercise names; Muscles mode shows the
+  per-muscle direct working-set chips instead - "Chest 6" between Monday
+  and Tuesday at a glance - plus a week total card. Weeks browse forward
+  and back with a This-week shortcut, finished workouts count their
+  logged sets, scheduled and active routines count every non-warm-up row
+  (empty planned rows included), and the whole planner can be pinned to
+  Home as a compact per-day muscle card that survives reloads and
+  exports.
+
 ## [1.18.1] - 2026-11-05
 
 ### Fixed

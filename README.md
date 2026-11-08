@@ -38,6 +38,10 @@ stays on your phone.
 
 - History grouped by month, a 7-day calendar strip on Home, and a Kaioken
   theme that runs cold and heats up with your last 7 days of training.
+- Week planner: a Monday-Sunday calendar of the week's routines (names +
+  exercises) with a Muscles mode that shows per-day and weekly direct
+  working-set counts per muscle - open it from Home or while editing a
+  routine, browse other weeks, and pin it to Home as a compact card.
 - Stats screen with eight time ranges (last week through all time):
   - Progression: top-set weight or total working reps, line or bars.
   - Muscles: a weighted nine-axis radar comparing the previous equal range.

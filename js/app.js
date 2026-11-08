@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.18.1';
+  const APP_VERSION = '1.19.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -211,6 +211,8 @@
     down: '<svg ' + A + '><path d="M6 9l6 6 6-6"/></svg>',
     dots: '<svg ' + A + '><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>',
     share: '<svg ' + A + '><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
+    calendar: '<svg ' + A + '><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+    pin: '<svg ' + A + '><path d="M9 3h6M12 3v6M8 9h8l-2 5h-4zM12 14v7"/></svg>',
   }
 
   /* ---------- autocomplete suggestions ---------- */
@@ -274,9 +276,9 @@
   let routines = [];
   let programs = []; // (#62) stored whole-array in the settings store
   let storagePersisted = null;
-  let view = { name: 'home' }; // home | new | routine | program | settings | stats
+  let view = { name: 'home' }; // home | new | routine | program | settings | stats | week
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', waistUnit: 'cm', homeChart: null, homeOrder: null, goals: null, bodyProfile: null, finishMetrics: null };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', waistUnit: 'cm', homeChart: null, homeOrder: null, homeWeek: false, goals: null, bodyProfile: null, finishMetrics: null };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -576,6 +578,10 @@
       const c = GYMLOG_CAT_COLORS[el.dataset.cat];
       if (c) el.style.background = c;
     });
+    root.querySelectorAll('.wk-mus-dot[data-cat]').forEach((el) => {
+      const c = GYMLOG_CAT_COLORS[el.dataset.cat];
+      if (c) el.style.background = c;
+    });
     root.querySelectorAll('.sw[data-swatch]').forEach((el) => {
       const t = THEMES[el.dataset.th];
       if (!t) return;
@@ -600,6 +606,7 @@
       case 'program': renderProgram(); break;
       case 'settings': renderSettings(); break;
       case 'stats': renderStats(); break;
+      case 'week': renderWeek(); break;
       default: renderHome(); break;
     }
     paintGeneratedStyles($app);
@@ -1826,6 +1833,13 @@
   let calOpen = false;
   let calOffset = 0; // displayed month relative to this month
 
+  // Week planner (#v1.19.0): the Monday-Sunday overview of what is
+  // scheduled. The offset browses weeks (view state only, never stored);
+  // the detail/summary mode lives for the session. The Home pin itself is
+  // the persisted homeWeek setting.
+  let weekOffset = 0; // displayed week relative to this week
+  let weekMode = 'detail'; // 'detail' (routine + exercise names) | 'summary' (muscle sets)
+
   function workoutDays() {
     const days = {};
     completedRoutines().forEach((r) => {
@@ -1938,6 +1952,7 @@
     // history block; the order persists in the settings store.
     const secs = {
       cal: calHTML,
+      week: settings.homeWeek ? homeWeekHTML() : '',
       'goal-wo': goalWorkoutsHTML(),
       'goal-su': goalSuppsHTML(),
       'goal-wt': goalMeasSectionHTML('weight'),
@@ -1961,6 +1976,7 @@
       (settings.theme === 'kaioken'
         ? ' class="heat-title heat-' + computeHeat() + '"'
         : '') + '>Kaioken</h1>' +
+      '<button class="btn btn-icon" id="act-week" aria-label="Week schedule">' + I.calendar + '</button>' +
       '<button class="btn btn-icon" id="act-stats" aria-label="Volume charts">' + I.chart + '</button>' +
       '<button class="btn btn-icon" id="act-settings" aria-label="Settings">' + I.gear + '</button></header>' +
       installHint() +
@@ -1994,6 +2010,7 @@
       render();
     };
     document.getElementById('act-new').onclick = () => go('new');
+    document.getElementById('act-week').onclick = () => openWeek();
     document.getElementById('act-stats').onclick = () => { statsSelKey = null; go('stats'); };
     document.getElementById('act-settings').onclick = () => go('settings');
     $app.querySelectorAll('.month-head').forEach((el) => {
@@ -2038,6 +2055,7 @@
       });
     };
     if (settings.homeChart) bindHomeChart();
+    if (settings.homeWeek) bindHomeWeek();
     $app.querySelectorAll('.home-sec').forEach((sec) => {
       attachHoldDrag(sec, {
         siblings: '.home-sec',
@@ -2051,12 +2069,197 @@
     });
   }
 
+  /* ---------- week planner view ---------- */
+
+  // Where the Week screen was opened from: the in-app back button returns
+  // there (Home or the routine being built), the same go() pattern every
+  // other back button uses.
+  let weekFrom = null;
+
+  function openWeek() {
+    weekOffset = 0;
+    weekFrom = view.name === 'week'
+      ? weekFrom
+      : { name: view.name, id: view.id };
+    go('week');
+  }
+
+  function weekRoutineHTML(r, today) {
+    let right = I.chev;
+    if (r.status === 'active') right = '<span class="chip chip-active">active</span>';
+    else if (r.status === 'scheduled' && r.date === today) right = '<span class="chip chip-today">today</span>';
+    else if (r.status === 'completed') {
+      right = '<span class="chip chip-done">' + fmtShort((r.endedAt || 0) - (r.startedAt || 0)) + '</span>';
+    }
+    const names = (r.exercises || []).map((ex) => ex.name).filter(Boolean);
+    const meta = names.length
+      ? esc(names.join(' \u00b7 '))
+      : 'No exercises yet';
+    return '<button class="item week-routine' + (r.status === 'completed' ? ' hist' : '') +
+      '" data-id="' + esc(r.id) + '">' +
+      '<span class="item-main">' +
+      '<span class="item-name">' + esc(r.name) + '</span>' +
+      '<span class="item-meta week-ex-list">' + meta + '</span>' +
+      '</span>' +
+      '<span class="item-right">' + right + '</span>' +
+      '</button>';
+  }
+
+  function weekDayHTML(day, today, mode) {
+    const d = day.date;
+    const isToday = day.iso === today;
+    const total = weekTotalSets(day.totals);
+    let body;
+    if (mode === 'summary') {
+      const chips = weekMuscleChipsHTML(day.totals);
+      body = !day.routines.length
+        ? '<span class="empty-inline">Rest day</span>'
+        : (chips || '<span class="empty-inline">Cardio / core work only</span>');
+    } else {
+      body = day.routines.length
+        ? day.routines.map((r) => weekRoutineHTML(r, today)).join('')
+        : '<div class="empty-inline">Rest day</div>';
+    }
+    return '<div class="card week-day' + (isToday ? ' today' : '') + '">' +
+      '<div class="week-day-head">' +
+      '<span class="week-day-name">' + esc(d.toLocaleDateString(undefined, { weekday: 'long' })) + '</span>' +
+      '<span class="week-day-right">' + d.getDate() +
+      (total ? ' \u00b7 ' + total + (total === 1 ? ' set' : ' sets') : '') +
+      '</span>' +
+      '</div>' +
+      '<div class="week-day-body">' + body + '</div>' +
+      '</div>';
+  }
+
+  function renderWeek() {
+    const today = todayISO();
+    const now = new Date();
+    const base = weekStart(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+    const start = new Date(base.getFullYear(), base.getMonth(), base.getDate() + weekOffset * 7);
+    const days = weekPlannerData(start);
+    const totals = weekTotalsOf(days);
+    const totalSets = weekTotalSets(totals);
+    const anyRoutine = days.some((day) => day.routines.length);
+
+    $app.innerHTML =
+      '<header class="topbar">' +
+      '<button class="btn btn-icon" id="act-back" aria-label="Back">' + I.back + '</button>' +
+      '<h1 class="topbar-title">Week</h1>' +
+      '<button class="btn btn-icon btn-week-pin' + (settings.homeWeek ? ' on' : '') +
+      '" id="act-week-pin" aria-label="' + (settings.homeWeek ? 'Unpin from Home' : 'Pin to Home') +
+      '" aria-pressed="' + (settings.homeWeek ? 'true' : 'false') + '">' + I.pin + '</button>' +
+      '</header>' +
+      '<div class="card week-nav">' +
+      '<button type="button" class="cal-nav-btn" id="week-prev" aria-label="Previous week">' + I.chev + '</button>' +
+      '<span class="week-nav-label" id="week-label">' + esc(weekRangeLabel(start)) + '</span>' +
+      '<button type="button" class="cal-nav-btn" id="week-next" aria-label="Next week">' + I.chev + '</button>' +
+      '</div>' +
+      (weekOffset !== 0
+        ? '<button class="btn btn-ghost btn-block" id="week-today" type="button">This week</button>'
+        : '') +
+      '<div class="seg seg-week-mode">' +
+      '<button type="button" class="' + (weekMode === 'detail' ? 'on' : '') + '" data-wm="detail">Routines</button>' +
+      '<button type="button" class="' + (weekMode === 'summary' ? 'on' : '') + '" data-wm="summary">Muscles</button>' +
+      '</div>' +
+      (totalSets
+        ? '<div class="card week-total">' +
+          '<div class="week-total-head">' + totalSets + (totalSets === 1 ? ' set' : ' sets') + ' this week</div>' +
+          weekMuscleChipsHTML(totals) +
+          '</div>'
+        : (anyRoutine ? '' :
+          '<div class="card"><div class="empty">Nothing scheduled this week. Create a routine or schedule one from a program.</div></div>')) +
+      days.map((day) => weekDayHTML(day, today, weekMode)).join('') +
+      '<div class="spacer"></div>';
+
+    document.getElementById('act-back').onclick = () => {
+      const from = weekFrom && weekFrom.name !== 'week' ? weekFrom : { name: 'home' };
+      go(from.name, from.id ? { id: from.id } : null);
+    };
+    document.getElementById('act-week-pin').onclick = () => {
+      settings.homeWeek = !settings.homeWeek;
+      store.setSetting('homeWeek', settings.homeWeek)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+      toast(settings.homeWeek ? 'Pinned to Home' : 'Removed from Home');
+      render();
+    };
+    document.getElementById('week-prev').onclick = () => {
+      weekOffset--;
+      render();
+    };
+    document.getElementById('week-next').onclick = () => {
+      weekOffset++;
+      render();
+    };
+    const todayBtn = document.getElementById('week-today');
+    if (todayBtn) todayBtn.onclick = () => {
+      weekOffset = 0;
+      render();
+    };
+    $app.querySelectorAll('.seg-week-mode button').forEach((b) => {
+      b.onclick = () => {
+        if (weekMode === b.dataset.wm) return;
+        weekMode = b.dataset.wm;
+        render();
+      };
+    });
+    $app.querySelectorAll('.week-routine').forEach((el) => {
+      el.onclick = () => go('routine', { id: el.dataset.id });
+    });
+  }
+
+  /* ---- home week pin ---- */
+
+  // The pinned Home card is the compact summary: one row per weekday with
+  // that day's muscle chips. Tapping the title opens the full Week screen;
+  // the x removes the pin.
+  function homeWeekHTML() {
+    const now = new Date();
+    const start = weekStart(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+    const days = weekPlannerData(start);
+    const totalSets = weekTotalSets(weekTotalsOf(days));
+    const rows = days.map((day) => {
+      const total = weekTotalSets(day.totals);
+      const chips = weekMuscleChipsHTML(day.totals);
+      return '<div class="hw-day' + (day.iso === todayISO() ? ' today' : '') + '">' +
+        '<span class="hw-name">' + esc(day.date.toLocaleDateString(undefined, { weekday: 'short' })) + '</span>' +
+        '<span class="hw-date">' + day.date.getDate() + '</span>' +
+        '<span class="hw-chips">' + (!day.routines.length
+          ? '<span class="hw-rest">rest</span>'
+          : (chips || '<span class="hw-rest">cardio / core</span>')) + '</span>' +
+        (total ? '<span class="hw-total">' + total + '</span>' : '') +
+        '</div>';
+    }).join('');
+    return '<div class="card home-week">' +
+      '<div class="chart-head">' +
+      '<button class="chart-title" id="home-week-title" type="button">This week' +
+      (totalSets ? ' \u00b7 ' + totalSets + (totalSets === 1 ? ' set' : ' sets') : '') +
+      '</button>' +
+      '<button class="btn btn-icon" id="home-week-unpin" aria-label="Remove week card from Home">' + I.x + '</button>' +
+      '</div>' +
+      rows +
+      '</div>';
+  }
+
+  function bindHomeWeek() {
+    const title = document.getElementById('home-week-title');
+    if (title) title.onclick = () => openWeek();
+    const unpin = document.getElementById('home-week-unpin');
+    if (unpin) unpin.onclick = () => {
+      settings.homeWeek = false;
+      store.setSetting('homeWeek', false)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
+      toast('Removed from Home');
+      render();
+    };
+  }
+
   /* ---------- new routine ---------- */
   function renderNew() {
     $app.innerHTML =
       '<header class="topbar">' +
       '<button class="btn btn-icon" id="act-cancel" aria-label="Back">' + I.back + '</button>' +
-      '<h1 class="topbar-title">New Routine</h1></header>' +
+      '<h1 class="topbar-title">New Routine</h1>' +
+      '<button class="btn btn-icon" id="act-week" aria-label="Week schedule">' + I.calendar + '</button></header>' +
       '<div class="card">' +
       '<label class="field"><span>Name</span>' +
       '<input id="in-name" placeholder="e.g. Push Day" maxlength="60" autocomplete="off" autocapitalize="words">' +
@@ -2068,6 +2271,7 @@
       '<button class="btn btn-primary btn-block" id="act-create" type="button">Create Routine</button>';
 
     document.getElementById('act-cancel').onclick = () => go('home');
+    document.getElementById('act-week').onclick = () => openWeek();
     bindAutocomplete(
       document.getElementById('in-name'),
       document.getElementById('name-sug'),
@@ -2653,6 +2857,7 @@
       '<header class="topbar">' +
       '<button class="btn btn-icon" id="act-back" aria-label="Back">' + I.back + '</button>' +
       '<h1 class="topbar-title">' + esc(r.name) + '</h1>' +
+      '<button class="btn btn-icon" id="act-week" aria-label="Week schedule">' + I.calendar + '</button>' +
       '<button class="btn btn-icon" id="act-more" aria-label="More actions">' + I.dots + '</button>' +
       '<button class="btn btn-icon btn-danger" id="act-del" aria-label="Delete routine">' + I.trash + '</button>' +
       '</header>' +
@@ -2695,6 +2900,7 @@
     }
 
     document.getElementById('act-back').onclick = () => go('home');
+    document.getElementById('act-week').onclick = () => openWeek();
     document.getElementById('act-more').onclick = () => openSheet(r);
     const shareAct = document.getElementById('act-share');
     if (shareAct) shareAct.onclick = () => shareHighlight(r);
@@ -3429,6 +3635,94 @@
     if (p.length !== 3 || !p[0]) return esc(String(iso));
     return new Date(p[0], p[1] - 1, p[2])
       .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  }
+
+  /* ---------- week planner data ---------- */
+
+  // Direct working sets per primary muscle for one routine, status-aware:
+  // a finished workout counts the sets that were actually logged (the
+  // weekly chip's rule for history), a scheduled or active routine counts
+  // every non-warm-up row - empty planned rows included - so the planner
+  // total moves while a routine is being built (#v1.19.0).
+  function routinePlanSets(r) {
+    const totals = {};
+    GYMLOG_MUSCLE_AXES.forEach((m) => { totals[m] = 0; });
+    if (!r) return totals;
+    const counted = r.status === 'completed' ? hasWorkingSetData : ((s) => !s.warmup);
+    (r.exercises || []).forEach((ex) => {
+      const m = primaryMuscleOf(ex);
+      if (!m) return;
+      const n = ex.sets.filter(counted).length;
+      if (n) totals[m] += n;
+    });
+    return totals;
+  }
+
+  function mergePlanSets(into, from) {
+    GYMLOG_MUSCLE_AXES.forEach((m) => { into[m] += from[m] || 0; });
+  }
+
+  const WEEK_ROUTINE_ORDER = { active: 0, scheduled: 1, completed: 2 };
+
+  // Seven Monday-first day buckets for the week starting at `start`, each
+  // carrying the routines dated that day (active first, then scheduled,
+  // then completed) and the day's per-muscle direct working-set totals.
+  function weekPlannerData(start) {
+    const days = [];
+    const byIso = {};
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const totals = {};
+      GYMLOG_MUSCLE_AXES.forEach((m) => { totals[m] = 0; });
+      const day = { date: d, iso: isoKey(d), routines: [], totals: totals };
+      days.push(day);
+      byIso[day.iso] = day;
+    }
+    routines.forEach((r) => {
+      const d = routineDate(r);
+      if (!d) return;
+      const day = byIso[isoKey(d)];
+      if (!day) return;
+      day.routines.push(r);
+      mergePlanSets(day.totals, routinePlanSets(r));
+    });
+    days.forEach((day) => {
+      day.routines.sort((a, b) =>
+        (WEEK_ROUTINE_ORDER[a.status] != null ? WEEK_ROUTINE_ORDER[a.status] : 3) -
+        (WEEK_ROUTINE_ORDER[b.status] != null ? WEEK_ROUTINE_ORDER[b.status] : 3) ||
+        (a.createdAt || 0) - (b.createdAt || 0));
+    });
+    return days;
+  }
+
+  function weekTotalsOf(days) {
+    const totals = {};
+    GYMLOG_MUSCLE_AXES.forEach((m) => { totals[m] = 0; });
+    days.forEach((day) => mergePlanSets(totals, day.totals));
+    return totals;
+  }
+
+  function weekTotalSets(totals) {
+    return GYMLOG_MUSCLE_AXES.reduce((n, m) => n + (totals[m] || 0), 0);
+  }
+
+  // Muscle chips in axis order (chest, back, ...): the week view paints the
+  // dot via the CSSOM like the volume breakdown, never inline styles.
+  function weekMuscleChipsHTML(totals) {
+    return GYMLOG_MUSCLE_AXES
+      .filter((m) => (totals[m] || 0) > 0)
+      .map((m) => '<span class="wk-mus"><i class="wk-mus-dot" data-cat="' + esc(m) +
+        '"></i>' + esc(m) + ' <b>' + fmtWeekSets(totals[m]) + '</b></span>')
+      .join('');
+  }
+
+  function weekRangeLabel(start) {
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    const a = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const b = end.toLocaleDateString(undefined, start.getFullYear() === end.getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' });
+    return a + ' \u2013 ' + b;
   }
 
   function fmtVol(v) {
@@ -4390,7 +4684,7 @@
   // sections that appeared later (or were never saved) keep their default
   // spot at the end.
   function homeOrderOrDefault() {
-    const all = ['cal', 'goal-wo', 'goal-su', 'goal-wt', 'goal-wa', 'goal-bf',
+    const all = ['cal', 'week', 'goal-wo', 'goal-su', 'goal-wt', 'goal-wa', 'goal-bf',
       'chart', 'new', 'programs', 'active', 'scheduled', 'history'];
     // A pre-1.15.0 order saved the goals as one block: expand it in place
     // so the five blocks inherit its position instead of dropping to the
@@ -4823,6 +5117,12 @@
       settings.homeOrder = s.homeOrder;
       put('homeOrder', s.homeOrder);
     }
+    // The week-planner Home pin (#v1.19.0): a boolean, anything else falls
+    // back to unpinned.
+    if (typeof s.homeWeek === 'boolean') {
+      settings.homeWeek = s.homeWeek;
+      put('homeWeek', s.homeWeek);
+    }
     const goals = sanitizeGoals(s.goals);
     if (goals) {
       settings.goals = goals;
@@ -5092,6 +5392,7 @@
           finishMetrics: settings.finishMetrics,
           homeChart: settings.homeChart,
           homeOrder: settings.homeOrder,
+          homeWeek: settings.homeWeek,
           goals: settings.goals,
         },
       },
@@ -5530,6 +5831,8 @@
     .then((v) => { settings.homeChart = v && typeof v === 'object' && v.tab ? v : null; })
     .then(() => store.getSetting('homeOrder', null))
     .then((v) => { settings.homeOrder = Array.isArray(v) ? v : null; })
+    .then(() => store.getSetting('homeWeek', false))
+    .then((v) => { settings.homeWeek = v === true; })
     .then(() => store.getSetting('goals', null))
     .then((v) => { settings.goals = sanitizeGoals(v); })
     .then(() => store.getSetting('programs', null))

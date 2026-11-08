@@ -832,7 +832,149 @@
     phase(12);
   }
 
-  var phases = [phase1, phase2, phase3, phase4, phase5, phase6, phase7, phase8, phase9, phase10, phase11, phase12];
+  // Reads one key from the settings store directly: pin writes are
+  // IndexedDB puts fired without await, so a reload issued too early
+  // would outrun them (same discipline as waitIdb for routines).
+  function idbSetting(key) {
+    return new Promise(function (resolve, reject) {
+      var req = W().indexedDB.open('gymlog');
+      req.onerror = function () { reject(req.error); };
+      req.onsuccess = function () {
+        var db = req.result;
+        try {
+          var g = db.transaction('settings', 'readonly').objectStore('settings').get(key);
+          g.onsuccess = function () { db.close(); resolve(g.result); };
+          g.onerror = function () { db.close(); reject(g.error); };
+        } catch (e) { db.close(); reject(e); }
+      };
+    });
+  }
+
+  async function phase13() {
+    // Week planner (#v1.19.0): a Monday-Sunday calendar of the scheduled
+    // week with a routine-detail mode, a muscle-sets summary mode, week
+    // navigation, an entry point from the routine editor (with back) and
+    // a pinnable Home card. A fresh routine with known exercises drives
+    // the counts.
+    await gotoHome();
+    B('week-home-btn', !!byId('act-week'), 'topbar week button');
+
+    // Scheduled routine for today: Bench Press with 2 planned rows and
+    // Overhead Press with 1 - nothing else this week trains shoulders, so
+    // the Shoulders chip must read exactly 1.
+    click(byId('act-new'));
+    await until(function () { return byId('in-name'); }, 6000, 'new routine form');
+    setVal(byId('in-name'), 'Week Plan');
+    click(byId('act-create'));
+    await until(function () { return byId('act-add-ex'); }, 6000, 'routine view');
+    click(byId('act-add-ex'));
+    var card = await until(function () { return q('.ex-card[data-eid]'); }, 6000, 'exercise card');
+    setVal(card.querySelector('.ex-name'), 'Bench');
+    click(await until(function () { return q('.sug[data-name="Bench Press"]'); }, 4000, 'bench suggestion'));
+    await sleep(80);
+    click(q('.ex-card[data-eid] .btn-add-set'));
+    await until(function () { return qa('.ex-card[data-eid] .set-row').length === 2; }, 6000, '2 bench rows');
+    click(byId('act-add-ex'));
+    await until(function () { return qa('.ex-card[data-eid]').length === 2; }, 6000, 'second card');
+    setVal(qa('.ex-card[data-eid]')[1].querySelector('.ex-name'), 'Overhead');
+    click(await until(function () { return q('.sug[data-name="Overhead Press"]'); }, 4000, 'overhead suggestion'));
+    await sleep(80);
+
+    // Open the planner from the routine editor and come back to it.
+    click(byId('act-week'));
+    await until(function () { return byId('week-prev'); }, 6000, 'week view');
+    B('week-open', txt(q('.topbar-title')) === 'Week' && qa('.week-day').length === 7,
+      'days: ' + qa('.week-day').length);
+
+    var todayCard = q('.week-day.today');
+    B('week-detail-today', !!todayCard && !!todayCard.querySelector('.chip-today'),
+      'today card + chip');
+    var listed = Array.prototype.slice.call(
+      q('.week-day.today').querySelectorAll('.week-routine'));
+    var mine = listed.filter(function (el) { return txt(el).indexOf('Week Plan') !== -1; })[0];
+    B('week-detail-routine', !!mine &&
+      txt(mine).indexOf('Bench Press') !== -1 && txt(mine).indexOf('Overhead Press') !== -1,
+      mine ? txt(mine).slice(0, 80) : 'Week Plan not listed');
+
+    click(byId('act-back'));
+    await until(function () { return byId('act-add-ex'); }, 6000, 'back to routine');
+    B('week-back-to-routine', txt(q('.topbar-title')) === 'Week Plan',
+      txt(q('.topbar-title')));
+
+    await gotoHome();
+    click(byId('act-week'));
+    await until(function () { return byId('week-prev'); }, 6000, 'week view again');
+
+    // Muscle summary: exact Shoulders count, painted dot, week total card.
+    click(q('.seg-week-mode button[data-wm="summary"]'));
+    await until(function () { return q('.week-day.today .wk-mus'); }, 6000, 'muscle chips');
+    var chips = Array.prototype.slice.call(q('.week-day.today').querySelectorAll('.wk-mus'));
+    var shoulder = chips.filter(function (c) { return txt(c).indexOf('Shoulders') !== -1; })[0];
+    B('week-summary-chips', chips.length >= 2 && !!shoulder &&
+      shoulder.querySelector('b').textContent === '1',
+      chips.map(txt).join('|'));
+    var shDot = shoulder ? shoulder.querySelector('.wk-mus-dot') : null;
+    B('week-dot-painted', !!shDot && !!shDot.style.background,
+      shDot ? shDot.style.background : 'missing dot');
+    B('week-total-card', !!q('.week-total') && txt(q('.week-total')).indexOf('this week') !== -1,
+      q('.week-total') ? txt(q('.week-total')).slice(0, 60) : 'missing');
+
+    // Week navigation: forward is empty of today, This week restores it.
+    var firstLabel = txt(byId('week-label'));
+    click(byId('week-next'));
+    await until(function () { return byId('week-today'); }, 6000, 'this-week button');
+    B('week-nav-next', txt(byId('week-label')) !== firstLabel && !q('.week-day.today'),
+      txt(byId('week-label')));
+    click(byId('week-today'));
+    await until(function () { return !byId('week-today'); }, 6000, 'this week restored');
+    B('week-nav-today', !!q('.week-day.today'), 'today card back');
+    click(byId('week-prev'));
+    await until(function () { return byId('week-today'); }, 6000, 'prev week');
+    B('week-nav-prev', !q('.week-day.today'), 'no today card in prev week');
+    click(byId('week-today'));
+    await until(function () { return !byId('week-today'); }, 6000, 'this week again');
+
+    // Pin to Home, reload, then unpin from the card.
+    click(byId('act-week-pin'));
+    await until(function () { return byId('act-week-pin').classList.contains('on'); }, 4000, 'pin on');
+    B('week-pin-toggle', byId('act-week-pin').getAttribute('aria-pressed') === 'true', 'aria-pressed');
+    var saved = false;
+    var t0 = Date.now();
+    while (!saved && Date.now() - t0 < 6000) {
+      // setSetting stores { key, value } rows, so the row's value is the pin.
+      try {
+        var row = await idbSetting('homeWeek');
+        saved = !!row && row.value === true;
+      } catch (e) {}
+      if (!saved) await sleep(100);
+    }
+    B('week-pin-save', saved, 'homeWeek setting in idb');
+
+    await gotoHome();
+    var sec = await until(function () { return q('.home-sec[data-sec="week"]'); }, 6000, 'home week section');
+    B('week-home-pin', !!sec && sec.querySelectorAll('.hw-day').length === 7 &&
+      txt(sec).indexOf('This week') !== -1,
+      sec ? txt(sec).slice(0, 70) : 'missing');
+
+    click(byId('home-week-title'));
+    await until(function () { return byId('week-prev'); }, 6000, 'week from home card');
+    B('week-home-card-open', txt(q('.topbar-title')) === 'Week', 'title opens week');
+    await gotoHome();
+
+    await loadApp();
+    await until(function () { return q('.home-sec[data-sec="week"]'); }, 10000, 'pin after reload');
+    B('week-pin-persist', !!q('.home-sec[data-sec="week"]') &&
+      q('.home-sec[data-sec="week"]').querySelectorAll('.hw-day').length === 7,
+      'pin survived reload');
+
+    click(byId('home-week-unpin'));
+    await until(function () { return !q('.home-sec[data-sec="week"]'); }, 6000, 'unpinned');
+    B('week-home-unpin', !q('.home-sec[data-sec="week"]'), 'card removed from Home');
+
+    phase(13);
+  }
+
+  var phases = [phase1, phase2, phase3, phase4, phase5, phase6, phase7, phase8, phase9, phase10, phase11, phase12, phase13];
 
   (async function run() {
     try {

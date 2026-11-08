@@ -31,7 +31,7 @@ Set `KAIOKEN_HEADED=1` to watch the browser.
 Phases share one session in order, so a crash in one phase usually shows up
 as cascading failures in the next. Read the first `FAIL` line.
 
-## What is covered (111 checks)
+## What is covered (128 checks)
 
 | Phase | Area |
 |---|---|
@@ -47,6 +47,7 @@ as cascading failures in the next. Read the first `FAIL` line.
 | 10 | share button gating, 1080×1350 PNG, canvas pixels, copy, Escape, scheduled routines excluded |
 | 11 | same-origin framing allowed, no errors at exit |
 | 12 | theme switch, weekly goal reaches the Home card, program import renders |
+| 13 | week planner: routine detail + muscle summary modes, week navigation, editor entry point with back, pinnable Home card, pin persistence across reload |
 | runner | cross-origin frame guard, service worker registration + cache named from manifest version, malicious-import XSS regression (QA-01), DB-open and save-failure paths (QA-04), optional WebKit smoke (`KAIOKEN_WEBKIT=1`, QA-02) |
 
 `soft-*` checks are reported as `WARN` and never fail the run; they encode
