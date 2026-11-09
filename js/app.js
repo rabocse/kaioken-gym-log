@@ -454,7 +454,7 @@
     document.documentElement.dataset.photoFit = settings.photoFit;
   }
   const saveTimers = new Map();
-  const collapsedMonths = new Set();
+  const expandedMonths = new Set(); // history months are collapsed by default
 
   // Workout focus: in an active routine the exercises fold down to their
   // headers so only the one you are performing stays open. All start folded
@@ -1921,7 +1921,7 @@
         byKey[k].push(r);
       });
       historyHTML = '<div class="section-label">History</div>' + groups.map((k) => {
-        const open = !collapsedMonths.has(k);
+        const open = expandedMonths.has(k);
         const items = byKey[k].map((r) => itemHTML(r, today)).join('');
         return '<button class="month-head' + (open ? ' open' : ' closed') +
           '" type="button" data-m="' + k + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
@@ -2016,8 +2016,8 @@
     $app.querySelectorAll('.month-head').forEach((el) => {
       el.onclick = () => {
         const k = el.dataset.m;
-        if (collapsedMonths.has(k)) collapsedMonths.delete(k);
-        else collapsedMonths.add(k);
+        if (expandedMonths.has(k)) expandedMonths.delete(k);
+        else expandedMonths.add(k);
         render();
       };
     });

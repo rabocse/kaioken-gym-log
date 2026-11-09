@@ -31,7 +31,7 @@ Set `KAIOKEN_HEADED=1` to watch the browser.
 Phases share one session in order, so a crash in one phase usually shows up
 as cascading failures in the next. Read the first `FAIL` line.
 
-## What is covered (128 checks)
+## What is covered (130 checks)
 
 | Phase | Area |
 |---|---|
@@ -40,7 +40,7 @@ as cascading failures in the next. Read the first `FAIL` line.
 | 3 | start workout, fold/unfold, empty-set weekly count, typing sets, stats line, weekly chip stays row-based, rest timer, add/remove set, cardio layout |
 | 4 | finish sheet, body weight/supps, IndexedDB persistence across reload, edit metrics after finishing (#74) |
 | 5 | export shape, settings version line vs manifest version, import merge, bad JSON, duplicate ids |
-| 6 | action sheet, gesture lock, Escape, Tab trap, rename, duplicate, delete |
+| 6 | collapsed history months by default, action sheet, gesture lock, Escape, Tab trap, rename, duplicate, delete |
 | 7 | stats tabs, exercise selector, bar mode, volume gutter, weighted muscle radar + range switch (#72) |
 | 8 | CSP meta + zero violations, CSSOM-painted data attributes (`.segm`, `.bd-dot`, theme swatches) |
 | 9 | chart y-axis ticks/gridlines/unit, rescale on exercise switch, bar-gutter alignment and scaling, range change |

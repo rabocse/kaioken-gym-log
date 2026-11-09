@@ -287,6 +287,12 @@ async function runMaliciousImport(browser, appOrigin) {
       home.nameParsedAsElement === false && !home.anyHandlerAttr && !home.injectedImg &&
       !home.inlineScript, JSON.stringify(home));
 
+    // History months are collapsed by default, so expand them before the
+    // real (visibility-aware) click on the imported routine.
+    await page.evaluate(() => {
+      document.querySelectorAll('.month-head.closed').forEach((el) => el.click());
+    });
+    await page.waitForTimeout(100);
     await page.click('[data-id="poc-r1"]');
     await page.waitForSelector('.ex-card', { timeout: 10000 });
     await page.waitForTimeout(300);

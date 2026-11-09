@@ -501,6 +501,12 @@
 
   async function phase6() {
     await gotoHome();
+    B('history-collapsed-default',
+      !!q('.month-head.closed') && !!q('.month-items[hidden]'),
+      'closed=' + !!q('.month-head.closed') + ' hidden=' + !!q('.month-items[hidden]'));
+    click(q('.month-head.closed'));
+    await until(function () { return q('.month-head.open'); }, 4000, 'month expanded');
+    B('history-month-expand', !!q('.month-items:not([hidden])'), 'items visible after tap');
     var before = qa('.item').length;
     await openFirstHistoryItem();
     click(byId('act-more'));
