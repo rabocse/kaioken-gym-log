@@ -2566,11 +2566,7 @@
         '<button type="button" class="' + (ex.unit === 'lb' ? 'on' : '') + '" data-u="lb">lb</button>' +
         '</div>';
 
-    const doneN = ex.sets.reduce((n, s) => n + (s.done ? 1 : 0), 0);
     const folded = active && activeOpenEx !== ex.id;
-    const meta = active
-      ? doneN + '/' + ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets')
-      : ex.sets.length + (ex.sets.length === 1 ? ' set' : ' sets');
     const primary = primaryMuscleOf(ex);
     const weekN = primary && weekTotals ? (weekTotals[primary] || 0) : 0;
 
@@ -2601,7 +2597,6 @@
       '<span class="ex-meta' + (primary ? ' has-wk' : '') + '">' +
       '<span class="cat-tag">' + esc(gymlogCategoryOf(ex.name)) + '</span>' +
       weekChipHTML(primary, weekN) +
-      '<span class="muted-small">' + meta + '</span>' +
       '</span>' +
       '</div>' +
       rows +
@@ -3027,7 +3022,7 @@
         if (!chip) {
           chip = document.createElement('span');
           chip.className = 'wk-chip';
-          meta.insertBefore(chip, meta.querySelector('.muted-small'));
+          meta.appendChild(chip);
         }
         const n = fmtWeekSets(merged[primary] || 0);
         chip.dataset.muscle = primary;
