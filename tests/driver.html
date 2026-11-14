@@ -1087,7 +1087,189 @@
     phase(13);
   }
 
-  var phases = [phase1, phase2, phase3, phase4, phase5, phase6, phase7, phase8, phase9, phase10, phase11, phase12, phase13];
+  // Week organizer beta (#v1.21.0): the Settings switch, the Organize tab,
+  // live 2D tile drags (a Rest-day drop starts a new routine, a drop into
+  // another routine inserts at the release point, the emptied source
+  // stays), the interactive Home board and persistence across a reload.
+  async function phase14() {
+    function pdown(el, x, y) {
+      el.dispatchEvent(new (W().PointerEvent)('pointerdown', {
+        bubbles: true, cancelable: true, clientX: x, clientY: y,
+      }));
+    }
+    function pmove(x, y) {
+      D().dispatchEvent(new (W().PointerEvent)('pointermove', {
+        bubbles: true, cancelable: true, clientX: x, clientY: y,
+      }));
+    }
+    function pup() {
+      D().dispatchEvent(new (W().PointerEvent)('pointerup', {
+        bubbles: true, cancelable: true, clientX: 0, clientY: 0,
+      }));
+    }
+    function center(el) {
+      var rc = el.getBoundingClientRect();
+      return { x: rc.left + rc.width / 2, y: rc.top + rc.height / 2 };
+    }
+    function groupByName(nm) {
+      return qa('.pz-routine').filter(function (g) {
+        return txt(g.querySelector('.pz-rname')).indexOf(nm) !== -1;
+      })[0];
+    }
+    function tileNames(g) { return qa('.pz-tile', g).map(function (t) { return txt(t.querySelector('.pz-tname')); }); }
+    async function holdDrag(tile, targetEl, targetOff, probe) {
+      // Center the drop target in the board first: the drag's pointer
+      // coordinates come from live rects, and a centered column keeps
+      // them clear of the board's auto-scroll edges.
+      if (targetEl && targetEl.scrollIntoView) targetEl.scrollIntoView({ block: 'center', inline: 'center' });
+      await sleep(80);
+      var c = center(tile);
+      pdown(tile, c.x, c.y);
+      await sleep(650);
+      if (targetEl) {
+        var rc = targetEl.getBoundingClientRect();
+        pmove(rc.left + (targetOff ? targetOff.x : rc.width / 2),
+          rc.top + (targetOff ? targetOff.y : rc.height / 2));
+        await sleep(120);
+      }
+      if (probe) probe();
+      pup();
+      await until(function () { return !q('.drag-ghost') && q('.pz-board'); }, 6000, 'board re-render');
+      // The release eats stray clicks for 400ms (a drag release looks like
+      // a tap to the browser); wait that window out before any click().
+      await sleep(450);
+    }
+
+    // 1. The beta switch: off by default, persists on toggle.
+    await openSettings();
+    var sw = byId('sw-week-board');
+    B('pz-switch-default-off', !!sw && !sw.checked, 'switch missing or on');
+    click(sw);
+    await until(function () { return byId('sw-week-board').checked; }, 4000, 'switch on');
+    B('pz-switch-on', byId('sw-week-board').checked, 'toggled on');
+    var savedSw = false;
+    var t0 = Date.now();
+    while (!savedSw && Date.now() - t0 < 6000) {
+      try {
+        var row = await idbSetting('weekBoard');
+        savedSw = !!row && row.value === true;
+      } catch (e) {}
+      if (!savedSw) await sleep(100);
+    }
+    B('pz-switch-save', savedSw, 'weekBoard setting in idb');
+
+    // 2. The Week view gains the Organize tab; the board has 7 columns,
+    //    locked groups for the finished workouts and Week Plan's tiles.
+    await gotoHome();
+    click(byId('act-week'));
+    await until(function () { return byId('week-prev'); }, 6000, 'week view');
+    var orgBtn = q('.seg-week-mode button[data-wm="organize"]');
+    B('pz-tab-present', !!orgBtn, 'organize tab with beta on');
+    click(orgBtn);
+    await until(function () { return q('.pz-board .pz-col'); }, 6000, 'board');
+    B('pz-columns', qa('.pz-board .pz-col').length === 7,
+      'columns: ' + qa('.pz-board .pz-col').length);
+    B('pz-today-col', !!q('.pz-col.today'), 'today column marked');
+    B('pz-locked-groups', qa('.pz-routine.locked').length >= 1,
+      'locked groups: ' + qa('.pz-routine.locked').length);
+    var plan = groupByName('Week Plan');
+    B('pz-plan-group', !!plan && !plan.classList.contains('locked'), 'Week Plan scheduled group');
+    B('pz-plan-tiles', !!plan && tileNames(plan).join('|') === 'Bench Press|Overhead Press',
+      plan ? tileNames(plan).join('|') : 'no group');
+
+    // 3. Drag Bench Press onto a Rest day: hold -> ghost -> live move ->
+    //    drop starts a new "<weekday> Workout" routine there, the source
+    //    keeps Overhead Press, and the week's total sets ride along.
+    var cols = qa('.pz-board .pz-col');
+    var restCol = cols.filter(function (c) {
+      return c.querySelector('.pz-rest') && !c.classList.contains('today');
+    })[0];
+    B('pz-rest-col', !!restCol, 'a Rest column exists');
+    var restIso = restCol ? restCol.dataset.iso : '';
+    var totalBefore = txt(q('.week-total-head'));
+    var bench = plan ? Array.prototype.slice.call(plan.querySelectorAll('.pz-tile')).filter(function (tl) {
+      return txt(tl.querySelector('.pz-tname')) === 'Bench Press';
+    })[0] : null;
+    await holdDrag(bench, restCol, { x: 40, y: 60 }, function () {
+      B('pz-ghost', !!q('.drag-ghost'), 'ghost after hold');
+      B('pz-live-move', restCol.contains(bench) && restCol.classList.contains('drop-ok'),
+        'tile landed in the Rest column live');
+    });
+    var restCol2 = q('.pz-col[data-iso="' + restIso + '"]');
+    var newGroup = restCol2 && !restCol2.classList.contains('locked')
+      ? qa('.pz-routine:not(.locked)', restCol2)[0] : null;
+    B('pz-new-routine', !!newGroup && /Workout$/.test(txt(newGroup.querySelector('.pz-rname'))) &&
+      tileNames(newGroup).join('|') === 'Bench Press',
+      newGroup ? txt(newGroup.querySelector('.pz-rname')) + ':' + tileNames(newGroup).join('|') : 'no new group');
+    var plan2 = groupByName('Week Plan');
+    B('pz-source-updated', !!plan2 && tileNames(plan2).join('|') === 'Overhead Press',
+      plan2 ? tileNames(plan2).join('|') : 'missing source');
+    B('pz-total-stable', txt(q('.week-total-head')) === totalBefore,
+      txt(q('.week-total-head')) + ' vs ' + totalBefore);
+
+    // 4. Drag it back into Week Plan at the top: a cross-routine insert;
+    //    the emptied weekday routine stays (empty sources are allowed).
+    var bench2 = newGroup ? Array.prototype.slice.call(newGroup.querySelectorAll('.pz-tile')).filter(function (tl) {
+      return txt(tl.querySelector('.pz-tname')) === 'Bench Press';
+    })[0] : null;
+    var planTop = plan2 ? q('.pz-tile', plan2) : null;
+    await holdDrag(bench2, planTop, { x: 12, y: 4 }, function () {
+      B('pz-live-insert', !!plan2 && plan2.contains(bench2), 'tile live in the target group');
+    });
+    var plan3 = groupByName('Week Plan');
+    B('pz-cross-insert', !!plan3 && tileNames(plan3).join('|') === 'Bench Press|Overhead Press',
+      plan3 ? tileNames(plan3).join('|') : 'missing');
+    var restCol3 = q('.pz-col[data-iso="' + restIso + '"]');
+    var emptied = restCol3 ? qa('.pz-routine:not(.locked)', restCol3)[0] : null;
+    B('pz-emptied-source', !!emptied && tileNames(emptied).length === 0,
+      emptied ? txt(emptied.querySelector('.pz-rname')) + ':' + tileNames(emptied).length : 'missing');
+
+    // 5. Home pin: while the beta is on the card is the same compact
+    //    interactive board - drag Bench Press into the emptied weekday
+    //    routine right from Home.
+    click(byId('act-week-pin'));
+    await until(function () { return byId('act-week-pin').classList.contains('on'); }, 4000, 'pin on');
+    await gotoHome();
+    var homeBoard = await until(function () { return q('.home-sec[data-sec="week"] .pz-board'); }, 6000, 'home board');
+    B('pz-home-board', !!homeBoard && homeBoard.classList.contains('compact') &&
+      qa('.pz-col', homeBoard).length === 7, 'compact board pinned');
+    var homePlan = groupByName('Week Plan');
+    var homeBench = homePlan ? Array.prototype.slice.call(homePlan.querySelectorAll('.pz-tile')).filter(function (tl) {
+      return txt(tl.querySelector('.pz-tname')) === 'Bench Press';
+    })[0] : null;
+    var emptiedHead = emptied ? q('.home-sec[data-sec="week"] .pz-col[data-iso="' + restIso + '"] .pz-routine:not(.locked)') : null;
+    await holdDrag(homeBench, emptiedHead, null, function () {
+      B('pz-live-home-move', !!emptiedHead && emptiedHead.contains(homeBench), 'tile live in the Home board group');
+    });
+    var emptied2 = q('.home-sec[data-sec="week"] .pz-col[data-iso="' + restIso + '"] .pz-routine:not(.locked)');
+    B('pz-home-drag', !!emptied2 && tileNames(emptied2).join('|') === 'Bench Press',
+      emptied2 ? tileNames(emptied2).join('|') : 'missing target');
+
+    // 6. Reload: the switch, the tab and both moves persist; unpin.
+    await loadApp();
+    click(byId('act-settings'));
+    await until(function () { return byId('sw-week-board'); }, 10000, 'settings after reload');
+    B('pz-setting-persist', byId('sw-week-board').checked, 'beta still on after reload');
+    await gotoHome();
+    click(byId('act-week'));
+    await until(function () { return byId('week-prev'); }, 8000, 'week after reload');
+    B('pz-tab-persist', !!q('.seg-week-mode button[data-wm="organize"]'), 'organize tab after reload');
+    click(q('.seg-week-mode button[data-wm="organize"]'));
+    await until(function () { return q('.pz-board .pz-col'); }, 6000, 'board after reload');
+    var planR = groupByName('Week Plan');
+    var weekdayR = q('.pz-col[data-iso="' + restIso + '"] .pz-routine:not(.locked)');
+    B('pz-moves-persist', !!planR && tileNames(planR).join('|') === 'Overhead Press' &&
+      !!weekdayR && tileNames(weekdayR).join('|') === 'Bench Press',
+      (planR ? tileNames(planR).join('|') : '-') + ' / ' + (weekdayR ? tileNames(weekdayR).join('|') : '-'));
+    click(byId('act-week-pin'));
+    await until(function () { return !byId('act-week-pin').classList.contains('on'); }, 4000, 'unpinned');
+    await gotoHome();
+    B('pz-home-unpin', !q('.home-sec[data-sec="week"]'), 'home card removed');
+
+    phase(14);
+  }
+
+  var phases = [phase1, phase2, phase3, phase4, phase5, phase6, phase7, phase8, phase9, phase10, phase11, phase12, phase13, phase14];
 
   (async function run() {
     try {

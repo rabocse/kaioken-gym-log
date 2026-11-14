@@ -654,6 +654,113 @@ body.has-rest #app { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 .hw-rest { color: var(--muted); font-size: 12px; }
 .hw-total { font-size: 12.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* ---------- week organizer board (beta) ----------
+   A horizontally scrollable Monday-Sunday board: each day a column, each
+   scheduled routine a group of draggable exercise tiles. Active/finished
+   workouts render locked; drops highlight the column under the piece. */
+.pz-board {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.pz-col {
+  flex: 0 0 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 118px;
+  border: 1px dashed transparent;
+  border-radius: 10px;
+  padding: 6px;
+}
+.pz-col.drop-ok { border-color: var(--accent-border); background: var(--accent-soft); }
+.pz-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pz-col-head span:last-child { font-variant-numeric: tabular-nums; }
+.pz-col.today .pz-col-head { color: var(--text); }
+.pz-col.today { border-color: var(--accent-border); }
+.pz-colbody { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.pz-rest {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 10px 4px;
+}
+.pz-routine { display: flex; flex-direction: column; gap: 4px; }
+.pz-rname {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pz-lock {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.pz-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 8px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.pz-tname {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pz-tsets {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.pz-routine.locked .pz-tile { opacity: 0.55; cursor: default; }
+.pz-tile.drag-src { visibility: hidden; }
+.drag-ghost.pz-tile { box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45); transform: scale(1.03); }
+/* Compact variant: the interactive Home pin. */
+.pz-board.compact .pz-col { flex-basis: 118px; min-height: 96px; }
+.pz-board.compact .pz-tile { padding: 5px 7px; }
+.pz-board.compact .pz-tname { font-size: 11.5px; }
+.home-week-board { padding-bottom: 8px; }
+.home-week-board .pz-board { padding-bottom: 2px; }
+
 /* ---------- misc text ---------- */
 .banner {
   background: var(--accent-soft);

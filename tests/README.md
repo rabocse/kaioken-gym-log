@@ -31,7 +31,7 @@ Set `KAIOKEN_HEADED=1` to watch the browser.
 Phases share one session in order, so a crash in one phase usually shows up
 as cascading failures in the next. Read the first `FAIL` line.
 
-## What is covered (143 checks)
+## What is covered (168 checks)
 
 | Phase | Area |
 |---|---|
@@ -48,6 +48,7 @@ as cascading failures in the next. Read the first `FAIL` line.
 | 11 | same-origin framing allowed, no errors at exit |
 | 12 | theme switch, weekly goal reaches the Home card, program import renders, template editor + explicit schedule (#83), same-name templates kept (#73) |
 | 13 | week planner: routine detail + muscle summary modes, inline nav toggle (#87), caps day headers with ordinal + rule and no set count (#85, #86), weekly muscle bars (#84), week navigation, editor entry point with back, pinnable Home card, pin persistence across reload |
+| 14 | week organizer beta: settings switch + persistence, Organize tab, 7-column board with locked history groups, hold-drag ghost and live moves, Rest-day drop starts a weekday-named routine, cross-routine insert, emptied source kept, week totals stable, interactive compact Home board, everything survives a reload |
 | runner | cross-origin frame guard, service worker registration + cache named from manifest version, malicious-import XSS regression (QA-01), DB-open and save-failure paths (QA-04), optional WebKit smoke (`KAIOKEN_WEBKIT=1`, QA-02) |
 
 `soft-*` checks are reported as `WARN` and never fail the run; they encode

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.20.0';
+  const APP_VERSION = '1.21.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -283,7 +283,7 @@
   let storagePersisted = null;
   let view = { name: 'home' }; // home | new | routine | program | settings | stats | week
   let timerInt = null;
-  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', waistUnit: 'cm', homeChart: null, homeOrder: null, homeWeek: false, goals: null, bodyProfile: null, finishMetrics: null };
+  const settings = { rest: 120, theme: 'dark', bgStyle: 'off', photo: '', photoFit: 'fill', suppsLast: false, bwUnit: 'kg', waistUnit: 'cm', homeChart: null, homeOrder: null, homeWeek: false, weekBoard: false, goals: null, bodyProfile: null, finishMetrics: null };
 
   const THEMES = {
     dark: { label: 'Dark', bg: '#0f1316', card: '#161c23', accent: '#34d399', meta: '#0f1316' },
@@ -2138,7 +2138,9 @@
     $app.querySelectorAll('.home-sec').forEach((sec) => {
       attachHoldDrag(sec, {
         siblings: '.home-sec',
-        interactive: 'input, button, textarea, select, .sug, .sug-box, svg',
+        // .pz-board: while the organizer beta pins the interactive board
+        // to Home, touches over the board belong to the tiles.
+        interactive: 'input, button, textarea, select, .sug, .sug-box, svg, .pz-board',
         onEnd: (els) => {
           settings.homeOrder = els.map((s) => s.dataset.sec).filter(Boolean);
           store.setSetting('homeOrder', settings.homeOrder)
@@ -2220,6 +2222,10 @@
   }
 
   function renderWeek() {
+    // The organizer tab only exists while its beta switch is on; a stale
+    // in-memory mode (the switch was just turned off) falls back to the
+    // routine detail list.
+    if (!settings.weekBoard && weekMode === 'organize') weekMode = 'detail';
     const today = todayISO();
     const now = new Date();
     const base = weekStart(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
@@ -2243,6 +2249,9 @@
       '<div class="seg seg-week-mode" role="group" aria-label="Week view mode">' +
       '<button type="button" class="' + (weekMode === 'detail' ? 'on' : '') + '" data-wm="detail">Routines</button>' +
       '<button type="button" class="' + (weekMode === 'summary' ? 'on' : '') + '" data-wm="summary">Muscles</button>' +
+      (settings.weekBoard
+        ? '<button type="button" class="' + (weekMode === 'organize' ? 'on' : '') + '" data-wm="organize">Organize</button>'
+        : '') +
       '</div>' +
       '<button type="button" class="cal-nav-btn" id="week-next" aria-label="Next week">' + I.chev + '</button>' +
       '</div>' +
@@ -2256,7 +2265,10 @@
           '</div>'
         : (anyRoutine ? '' :
           '<div class="card"><div class="empty">Nothing scheduled this week. Create a routine or schedule one from a program.</div></div>')) +
-      days.map((day) => weekDayHTML(day, today, weekMode)).join('') +
+      (weekMode === 'organize'
+        ? weekBoardHTML(days) +
+          '<p class="hint">Hold an exercise to drag it between days, routines or positions. Dropping one on a Rest day starts a new routine there; active and finished workouts stay locked.</p>'
+        : days.map((day) => weekDayHTML(day, today, weekMode)).join('')) +
       '<div class="spacer"></div>';
 
     document.getElementById('act-back').onclick = () => {
@@ -2293,18 +2305,31 @@
     $app.querySelectorAll('.week-routine').forEach((el) => {
       el.onclick = () => go('routine', { id: el.dataset.id });
     });
+    if (weekMode === 'organize') bindWeekBoard();
   }
 
   /* ---- home week pin ---- */
 
   // The pinned Home card is the compact summary: one row per weekday with
   // that day's muscle chips. Tapping the title opens the full Week screen;
-  // the x removes the pin.
+  // the x removes the pin. With the organizer beta on, the same card
+  // becomes the compact interactive board - the week can be reorganized
+  // right from Home (Home-section reordering pauses over the board).
   function homeWeekHTML() {
     const now = new Date();
     const start = weekStart(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
     const days = weekPlannerData(start);
     const totalSets = weekTotalSets(weekTotalsOf(days));
+    const head =
+      '<div class="chart-head">' +
+      '<button class="chart-title" id="home-week-title" type="button">This week' +
+      (totalSets ? ' \u00b7 ' + totalSets + (totalSets === 1 ? ' set' : ' sets') : '') +
+      '</button>' +
+      '<button class="btn btn-icon" id="home-week-unpin" aria-label="Remove week card from Home">' + I.x + '</button>' +
+      '</div>';
+    if (settings.weekBoard) {
+      return '<div class="card home-week home-week-board">' + head + weekBoardHTML(days, true) + '</div>';
+    }
     const rows = days.map((day) => {
       const total = weekTotalSets(day.totals);
       const chips = weekMuscleChipsHTML(day.totals);
@@ -2317,15 +2342,7 @@
         (total ? '<span class="hw-total">' + total + '</span>' : '') +
         '</div>';
     }).join('');
-    return '<div class="card home-week">' +
-      '<div class="chart-head">' +
-      '<button class="chart-title" id="home-week-title" type="button">This week' +
-      (totalSets ? ' \u00b7 ' + totalSets + (totalSets === 1 ? ' set' : ' sets') : '') +
-      '</button>' +
-      '<button class="btn btn-icon" id="home-week-unpin" aria-label="Remove week card from Home">' + I.x + '</button>' +
-      '</div>' +
-      rows +
-      '</div>';
+    return '<div class="card home-week">' + head + rows + '</div>';
   }
 
   function bindHomeWeek() {
@@ -2339,6 +2356,114 @@
       toast('Removed from Home');
       render();
     };
+    bindWeekBoard();
+  }
+
+  /* ---- week organizer board (beta) ---- */
+
+  // A sliding-puzzle view of the scheduled week (#v1.21.0 beta): seven
+  // day columns, every scheduled routine a group of draggable exercise
+  // tiles. Active and finished workouts render as locked tiles so the
+  // week stays readable, and no drop ever touches them - the board is a
+  // planning tool, not a history editor.
+  function pzTileHTML(r, ex) {
+    const n = (ex.sets || []).filter((s) => !s.warmup).length;
+    return '<div class="pz-tile" data-rid="' + esc(r.id) + '" data-exid="' + esc(ex.id) + '"' +
+      ' role="button" tabindex="0" aria-label="' + esc(ex.name || 'Exercise') + '">' +
+      '<span class="pz-tname">' + esc(ex.name || 'Exercise') + '</span>' +
+      '<span class="pz-tsets">' + (n || '\u2013') + '</span>' +
+      '</div>';
+  }
+
+  function weekBoardHTML(days, compact) {
+    const today = todayISO();
+    return '<div class="pz-board' + (compact ? ' compact' : '') + '">' +
+      days.map((day) => {
+        const groups = day.routines.map((r) =>
+          '<div class="pz-routine' + (r.status === 'scheduled' ? '' : ' locked') +
+            '" data-rid="' + esc(r.id) + '">' +
+            '<div class="pz-rname">' + esc(r.name) +
+              (r.status === 'scheduled' ? '' :
+                ' <span class="pz-lock">' + (r.status === 'active' ? 'active' : 'done') + '</span>') +
+            '</div>' +
+            (r.exercises || []).map((ex) => pzTileHTML(r, ex)).join('') +
+            '</div>').join('');
+        return '<div class="pz-col' + (day.iso === today ? ' today' : '') + '" data-iso="' + day.iso + '">' +
+          '<div class="pz-col-head">' +
+          '<span>' + esc(day.date.toLocaleDateString(undefined, { weekday: 'short' })) + '</span>' +
+          '<span>' + esc(ordinal(day.date.getDate())) + '</span>' +
+          '</div>' +
+          '<div class="pz-colbody">' +
+          (groups || '<div class="pz-rest">Rest</div>') +
+          '</div>' +
+          '</div>';
+      }).join('') +
+      '</div>';
+  }
+
+  function bindWeekBoard() {
+    $app.querySelectorAll('.pz-tile').forEach((el) => {
+      const r = getRoutine(el.dataset.rid);
+      if (!r) return;
+      el.addEventListener('click', () => go('routine', { id: r.id }));
+      el.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        ev.preventDefault();
+        go('routine', { id: r.id });
+      });
+      if (r.status !== 'scheduled') return;
+      attachTileDrag(el, { onDrop: () => pzCommitMove(el) });
+    });
+  }
+
+  // The drop commits the DOM's verdict back into the data model: splice
+  // the exercise out of its routine, then either insert it into the
+  // routine group the tile landed in (its DOM index among that group's
+  // tiles is the insertion point) or - when the tile sits loose in a
+  // column body - start a brand-new routine on that day.
+  function pzCommitMove(el) {
+    const src = getRoutine(el.dataset.rid);
+    if (!src || src.status !== 'scheduled') return;
+    const ex = (src.exercises || []).find((e) => e.id === el.dataset.exid);
+    if (!ex) return;
+    const rz = el.closest('.pz-routine');
+    const col = el.closest('.pz-col');
+    let tidx = -1;
+    let tgt = null;
+    if (rz) {
+      tgt = getRoutine(rz.dataset.rid);
+      if (tgt && tgt.status === 'scheduled') {
+        tidx = Array.prototype.slice.call(rz.querySelectorAll('.pz-tile')).indexOf(el);
+      } else {
+        tgt = null;
+      }
+    }
+    if (!tgt) {
+      if (!col) return;
+      const d = new Date(col.dataset.iso + 'T00:00:00');
+      tgt = {
+        id: uid(),
+        name: d.toLocaleDateString(undefined, { weekday: 'long' }) + ' Workout',
+        date: col.dataset.iso,
+        createdAt: Date.now(),
+        startedAt: null,
+        endedAt: null,
+        status: 'scheduled',
+        exercises: [],
+      };
+      routines.push(tgt);
+      tidx = 0;
+    }
+    const at = src.exercises.indexOf(ex);
+    if (at !== -1) src.exercises.splice(at, 1);
+    const moved = src !== tgt || tidx !== at;
+    const ins = Math.max(0, Math.min(tidx < 0 ? tgt.exercises.length : tidx, tgt.exercises.length));
+    tgt.exercises.splice(ins, 0, ex);
+    if (moved) {
+      scheduleSave(src, true);
+      scheduleSave(tgt, true);
+      toast(src !== tgt ? 'Moved to ' + tgt.name : 'Reordered in ' + tgt.name);
+    }
   }
 
   /* ---------- new routine ---------- */
@@ -2878,6 +3003,193 @@
           .filter(Boolean);
         scheduleSave(r, true);
       },
+    });
+  }
+
+  // The organizer board's 2D drag (beta): the same hold-500ms-ghost-live
+  // contract as attachHoldDrag, but the piece moves across the board's
+  // day columns as well as within its routine group. Locked groups are
+  // never insertion targets; a column with no scheduled routine takes the
+  // tile loose in its body (the commit turns that into a new routine).
+  // Dragging near the board's left/right edge auto-scrolls it.
+  function attachTileDrag(el, opts) {
+    const HOLD_MS = 500;
+    const DRIFT_SQ = 144; // 12px, same tolerance as the long-press sheet
+    const EDGE = 48;
+    const SCROLL_STEP = 10;
+    let holdTimer = null;
+    let dragging = false;
+    let pid = -1;
+    let sx = 0;
+    let sy = 0;
+    let grabDX = 0;
+    let grabDY = 0;
+    let ghost = null;
+    let board = null;
+    let lastPt = null;
+    let scrollDX = 0;
+    let scrollRAF = 0;
+
+    const stopHold = () => {
+      if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    };
+
+    const startDrag = (e) => {
+      dragging = true;
+      exDragActive = true;
+      document.body.classList.add('ex-dragging');
+      board = el.closest('.pz-board');
+      const rect = el.getBoundingClientRect();
+      grabDX = e.clientX - rect.left;
+      grabDY = e.clientY - rect.top;
+      ghost = el.cloneNode(true);
+      el.classList.add('drag-src');
+      ghost.classList.add('drag-ghost');
+      ghost.style.width = rect.width + 'px';
+      ghost.style.left = rect.left + 'px';
+      ghost.style.top = rect.top + 'px';
+      document.body.appendChild(ghost);
+      try { el.setPointerCapture(pid); } catch (err) {}
+    };
+
+    const hitTest = (pt) => {
+      if (!pt || !board) return;
+      lastPt = pt;
+      let hot = null;
+      board.querySelectorAll('.pz-col').forEach((c) => {
+        const rc = c.getBoundingClientRect();
+        if (pt.clientX >= rc.left && pt.clientX < rc.right &&
+            pt.clientY >= rc.top - 8 && pt.clientY < rc.bottom + 8) hot = c;
+      });
+      board.querySelectorAll('.pz-col.drop-ok').forEach((c) => {
+        if (c !== hot) c.classList.remove('drop-ok');
+      });
+      if (!hot) return;
+      hot.classList.add('drop-ok');
+      // Target group: the last scheduled routine whose top sits above the
+      // pointer, clamped to the first; finished/active groups are skipped.
+      const groups = Array.prototype.slice.call(
+        hot.querySelectorAll('.pz-routine:not(.locked)'));
+      if (!groups.length) {
+        const body = hot.querySelector('.pz-colbody');
+        if (body && el.parentNode !== body) body.appendChild(el);
+        return;
+      }
+      let rz = groups[0];
+      for (let i = 0; i < groups.length; i++) {
+        const rc = groups[i].getBoundingClientRect();
+        if (pt.clientY >= rc.top) rz = groups[i];
+      }
+      const others = Array.prototype.slice.call(rz.querySelectorAll('.pz-tile'))
+        .filter((t) => t !== el);
+      let ref = null;
+      for (let i = 0; i < others.length; i++) {
+        const rc = others[i].getBoundingClientRect();
+        if (pt.clientY > rc.top + rc.height / 2) ref = others[i];
+      }
+      if (ref) rz.insertBefore(el, ref.nextSibling);
+      else if (others.length) rz.insertBefore(el, others[0]);
+      else rz.appendChild(el);
+    };
+
+    const scrollTick = () => {
+      if (!dragging || !scrollDX) { scrollRAF = 0; return; }
+      board.scrollLeft += scrollDX;
+      hitTest(lastPt);
+      scrollRAF = requestAnimationFrame(scrollTick);
+    };
+
+    const moveDrag = (e) => {
+      if (!ghost) return;
+      ghost.style.left = (e.clientX - grabDX) + 'px';
+      ghost.style.top = (e.clientY - grabDY) + 'px';
+      hitTest(e);
+      if (board) {
+        const rc = board.getBoundingClientRect();
+        scrollDX = e.clientX < rc.left + EDGE ? -SCROLL_STEP
+          : e.clientX > rc.right - EDGE ? SCROLL_STEP : 0;
+        if (scrollDX && !scrollRAF) scrollRAF = requestAnimationFrame(scrollTick);
+      }
+    };
+
+    const endDrag = () => {
+      dragging = false;
+      exDragActive = false;
+      document.body.classList.remove('ex-dragging');
+      stopHold();
+      if (scrollRAF) { cancelAnimationFrame(scrollRAF); scrollRAF = 0; }
+      scrollDX = 0;
+      docUnbind();
+      if (ghost) { ghost.remove(); ghost = null; }
+      el.classList.remove('drag-src');
+      board = null;
+      try { el.releasePointerCapture(pid); } catch (err) {}
+      opts.onDrop(el);
+      // the release can emit a stray click (the tile opens its routine on
+      // tap) - eat it, but only briefly so the next real tap still works
+      const kill = (ev) => {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        cleanupKill();
+      };
+      const cleanupKill = () => {
+        document.removeEventListener('click', kill, true);
+        clearTimeout(killT);
+      };
+      const killT = setTimeout(cleanupKill, 400);
+      document.addEventListener('click', kill, true);
+      render();
+    };
+
+    // Same listener discipline as attachHoldDrag: document-bound only
+    // while a hold or drag is in flight, released on any pointer end.
+    const docMove = (e) => {
+      if (e.pointerId !== pid) return;
+      if (dragging) { moveDrag(e); return; }
+      if (holdTimer == null) return;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      if (dx * dx + dy * dy > DRIFT_SQ) stopHold();
+    };
+    const docUp = (e) => {
+      if (e.pointerId !== pid) return;
+      stopHold();
+      docUnbind();
+      if (dragging) endDrag();
+    };
+    const docTouch = (e) => {
+      if (dragging) e.preventDefault();
+    };
+    const docBind = () => {
+      docUnbind();
+      document.addEventListener('pointermove', docMove);
+      document.addEventListener('pointerup', docUp);
+      document.addEventListener('pointercancel', docUp);
+      document.addEventListener('touchmove', docTouch, { passive: false });
+    };
+    const docUnbind = () => {
+      document.removeEventListener('pointermove', docMove);
+      document.removeEventListener('pointerup', docUp);
+      document.removeEventListener('pointercancel', docUp);
+      document.removeEventListener('touchmove', docTouch);
+    };
+
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || exDragActive) return;
+      stopHold();
+      pid = e.pointerId;
+      sx = e.clientX;
+      sy = e.clientY;
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        startDrag(e);
+      }, HOLD_MS);
+      docBind();
+    });
+    el.addEventListener('contextmenu', (e) => {
+      if (dragging || holdTimer) {
+        if (e.preventDefault) e.preventDefault();
+      }
     });
   }
 
@@ -5282,6 +5594,11 @@
       settings.homeWeek = s.homeWeek;
       put('homeWeek', s.homeWeek);
     }
+    // The organizer beta switch (#v1.21.0): same boolean discipline.
+    if (typeof s.weekBoard === 'boolean') {
+      settings.weekBoard = s.weekBoard;
+      put('weekBoard', s.weekBoard);
+    }
     const goals = sanitizeGoals(s.goals);
     if (goals) {
       settings.goals = goals;
@@ -5552,6 +5869,7 @@
           homeChart: settings.homeChart,
           homeOrder: settings.homeOrder,
           homeWeek: settings.homeWeek,
+          weekBoard: settings.weekBoard,
           goals: settings.goals,
         },
       },
@@ -5604,6 +5922,14 @@
       '</div>' +
       bodyProfileCardHTML() +
       goalSettingsCardHTML() +
+      '<div class="card">' +
+      '<div class="field"><span>Beta features</span></div>' +
+      '<div class="goal-f"><span>Week organizer</span>' +
+      '<label class="switch"><input type="checkbox" id="sw-week-board"' +
+      (settings.weekBoard ? ' checked' : '') + '><span class="sw-track"></span></label>' +
+      '</div>' +
+      '<p class="hint">Adds an Organize mode to the Week view: a board of your scheduled exercises you drag between days, routines and positions to plan the week at a glance. Dropping an exercise on a Rest day starts a new routine there. While this is on, the pinned Home week card becomes the same compact draggable board.</p>' +
+      '</div>' +
       '<div class="card">' +
       '<p class="hint">Your routines and settings (except the background photo, which stays on this device) are stored only on this device. Export regularly and keep a copy somewhere safe (Notes, email, cloud storage). Paste a backup below to restore it or move it to a new phone.</p>' +
       '<p class="hint">' + (storagePersisted === true
@@ -5674,6 +6000,16 @@
         store.setSetting('rest', settings.rest)
           .catch((e) => console.error('Kaioken: setting save failed', e));
       };
+    });
+
+    // Organizer beta (#v1.21.0): the switch persists on its own; the Week
+    // view picks it up on its next render (a stale Organize mode falls
+    // back to the routine list there).
+    const weekBoardSw = document.getElementById('sw-week-board');
+    if (weekBoardSw) weekBoardSw.addEventListener('change', () => {
+      settings.weekBoard = weekBoardSw.checked;
+      store.setSetting('weekBoard', settings.weekBoard)
+        .catch((e) => console.error('Kaioken: setting save failed', e));
     });
 
     // Body composition (#v1.13.0): fields save on change (display units
@@ -5992,6 +6328,8 @@
     .then((v) => { settings.homeOrder = Array.isArray(v) ? v : null; })
     .then(() => store.getSetting('homeWeek', false))
     .then((v) => { settings.homeWeek = v === true; })
+    .then(() => store.getSetting('weekBoard', false))
+    .then((v) => { settings.weekBoard = v === true; })
     .then(() => store.getSetting('goals', null))
     .then((v) => { settings.goals = sanitizeGoals(v); })
     .then(() => store.getSetting('programs', null))

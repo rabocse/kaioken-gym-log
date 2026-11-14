@@ -8,6 +8,22 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.21.0] - 2026-11-14
+
+### Added
+- Beta - week organizer: a "Week organizer" switch in Settings (off by
+  default) adds an Organize mode to the Week view - a horizontally
+  scrollable Monday-Sunday board where every scheduled routine's exercises
+  are draggable tiles. Hold a tile and slide it across days, between
+  routines or within its own routine; the week's muscle bars and counts
+  follow on every drop. Dropping a tile on a Rest day starts a new
+  routine there named after the weekday ("Wednesday Workout"); active and
+  finished workouts render as locked tiles and never accept drops. The
+  board auto-scrolls when a drag reaches its edge.
+- While the beta is on, the pinned Home week card becomes the same
+  compact interactive board - the week can be reorganized right from
+  Home, with Home-section reordering paused over the board.
+
 ## [1.20.0] - 2026-11-14
 
 ### Added
