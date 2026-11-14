@@ -31,11 +31,11 @@ Set `KAIOKEN_HEADED=1` to watch the browser.
 Phases share one session in order, so a crash in one phase usually shows up
 as cascading failures in the next. Read the first `FAIL` line.
 
-## What is covered (130 checks)
+## What is covered (143 checks)
 
 | Phase | Area |
 |---|---|
-| 1 | boot, catalog, empty state, no JS errors |
+| 1 | boot, catalog (single chest-supported row + retired-name aliases, #88), empty state, no JS errors |
 | 2 | new routine, name suggestions, create, exercise autocomplete, weekly chip |
 | 3 | start workout, fold/unfold, empty-set weekly count, typing sets, stats line, weekly chip stays row-based, rest timer, add/remove set, cardio layout |
 | 4 | finish sheet, body weight/supps, IndexedDB persistence across reload, edit metrics after finishing (#74) |
@@ -46,8 +46,8 @@ as cascading failures in the next. Read the first `FAIL` line.
 | 9 | chart y-axis ticks/gridlines/unit, rescale on exercise switch, bar-gutter alignment and scaling, range change |
 | 10 | share button gating, 1080×1350 PNG, canvas pixels, copy, Escape, scheduled routines excluded |
 | 11 | same-origin framing allowed, no errors at exit |
-| 12 | theme switch, weekly goal reaches the Home card, program import renders |
-| 13 | week planner: routine detail + muscle summary modes, week navigation, editor entry point with back, pinnable Home card, pin persistence across reload |
+| 12 | theme switch, weekly goal reaches the Home card, program import renders, template editor + explicit schedule (#83), same-name templates kept (#73) |
+| 13 | week planner: routine detail + muscle summary modes, inline nav toggle (#87), caps day headers with ordinal + rule and no set count (#85, #86), weekly muscle bars (#84), week navigation, editor entry point with back, pinnable Home card, pin persistence across reload |
 | runner | cross-origin frame guard, service worker registration + cache named from manifest version, malicious-import XSS regression (QA-01), DB-open and save-failure paths (QA-04), optional WebKit smoke (`KAIOKEN_WEBKIT=1`, QA-02) |
 
 `soft-*` checks are reported as `WARN` and never fail the run; they encode

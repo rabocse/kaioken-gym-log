@@ -58,8 +58,6 @@ const GYMLOG_EX = {
   'Single-Arm Dumbbell Row': 'Back',
   'Meadows Row': 'Back',
   'Smith Machine Row': 'Back',
-  'Chest-Supported Row': 'Back',
-  'Chest-Supported Machine Row': 'Back',
   'Chest-Supported Row Machine': 'Back',
   'Iso-Lateral Machine Row': 'Back',
   'Seated Machine Row': 'Back',
@@ -276,9 +274,18 @@ Object.keys(GYMLOG_EX).forEach((k) => {
 // All catalog exercise names, in catalog order, for autocomplete suggestions.
 const GYMLOG_EX_NAMES = Object.keys(GYMLOG_EX);
 
+// Retired catalog names (#88): hidden aliases, never suggested, that keep
+// history logged under an old name resolving to its category, weights and
+// canonical replacement instead of falling back to "Other".
+const GYMLOG_EX_ALIASES = {
+  'chest-supported row': 'Chest-Supported Row Machine',
+  'chest-supported machine row': 'Chest-Supported Row Machine',
+};
+
 function gymlogCategoryOf(name) {
   const n = String(name || '').trim().toLowerCase();
-  return GYMLOG_EX_LOWER[n] || 'Other';
+  const key = GYMLOG_EX_ALIASES[n] ? GYMLOG_EX_ALIASES[n].toLowerCase() : n;
+  return GYMLOG_EX_LOWER[key] || 'Other';
 }
 
 // Training axes of the stats radar (#72). Core, Full Body, Cardio and Other
@@ -330,8 +337,6 @@ const GYMLOG_MUSCLE_WEIGHTS = {
   'Single-Arm Dumbbell Row': { Back: 1, Biceps: 0.5 },
   'Meadows Row': { Back: 1, Biceps: 0.5 },
   'Smith Machine Row': { Back: 1, Biceps: 0.5 },
-  'Chest-Supported Row': { Back: 1, Biceps: 0.5 },
-  'Chest-Supported Machine Row': { Back: 1, Biceps: 0.5 },
   'Chest-Supported Row Machine': { Back: 1, Biceps: 0.5 },
   'Iso-Lateral Machine Row': { Back: 1, Biceps: 0.5 },
   'Seated Machine Row': { Back: 1, Biceps: 0.5 },
@@ -431,7 +436,8 @@ Object.keys(GYMLOG_MUSCLE_WEIGHTS).forEach((k) => {
 // category is a radar axis; Core/Full Body/Cardio/Other return no axis.
 function gymlogMuscleWeights(name) {
   const n = String(name || '').trim().toLowerCase();
-  if (GYMLOG_MUSCLE_WEIGHTS_LOWER[n]) return GYMLOG_MUSCLE_WEIGHTS_LOWER[n];
+  const key = GYMLOG_EX_ALIASES[n] ? GYMLOG_EX_ALIASES[n].toLowerCase() : n;
+  if (GYMLOG_MUSCLE_WEIGHTS_LOWER[key]) return GYMLOG_MUSCLE_WEIGHTS_LOWER[key];
   const cat = gymlogCategoryOf(name);
   if (GYMLOG_MUSCLE_AXES.indexOf(cat) === -1) return {};
   const out = {};

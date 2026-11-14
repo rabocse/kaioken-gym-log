@@ -263,6 +263,16 @@
     var names = (catText.match(/'[^']+': '(Chest|Back|Legs|Quads|Cardio|Other|Biceps|Triceps)'/g) || []).length;
     B('boot-catalog', names > 100 && catText.indexOf("'Bench Press': 'Chest'") !== -1,
       'catalog entries: ' + names);
+    // #88: exactly one chest-supported row in the picker, with the retired
+    // names kept as hidden aliases so old logs still resolve to Back.
+    B('catalog-row-dedupe',
+      catText.indexOf("'Chest-Supported Row': 'Back'") === -1 &&
+      catText.indexOf("'Chest-Supported Machine Row':") === -1 &&
+      catText.indexOf("'Chest-Supported Row Machine': 'Back'") !== -1,
+      'one chest-supported row entry');
+    var csrCat = 'err';
+    try { csrCat = W().gymlogCategoryOf('Chest-Supported Row'); } catch (e) { csrCat = 'err:' + e.message; }
+    B('catalog-row-alias', csrCat === 'Back', 'legacy name resolves to ' + csrCat);
     B('boot-home-blocks', !!(q('.home-sec[data-sec="cal"]') && byId('act-new') && byId('act-settings')),
       'calendar/new/settings present');
     var hist = txt(q('.home-sec[data-sec="history"]'));
@@ -835,6 +845,70 @@
     var prog = q('[data-prog="prog-fx"]');
     B('program-import', !!prog && txt(prog).indexOf('PPL') !== -1,
       prog ? txt(prog).slice(0, 60) : 'missing');
+
+    // #83: tapping a program routine opens the template editor - it must
+    // not schedule anything by itself.
+    click(await until(function () { return q('[data-prog="prog-fx"]'); }, 6000, 'program card'));
+    await until(function () { return qa('.prog-tpl').length === 1; }, 6000, 'program view');
+    var routinesBefore = (await idbRoutines()).length;
+    click(q('.prog-tpl'));
+    await until(function () { return byId('act-tpl-schedule'); }, 6000, 'template editor');
+    B('program-tpl-open', !!byId('in-tpl-name') && byId('in-tpl-name').value === 'Push A' &&
+      !byId('act-start') && !byId('in-rdate') && !byId('act-del'),
+      'name field + no routine lifecycle buttons');
+    var routinesAfter = (await idbRoutines()).length;
+    B('program-tpl-no-schedule', routinesAfter === routinesBefore,
+      'routines before ' + routinesBefore + ', after ' + routinesAfter);
+
+    // Editing the template lands in the programs store, never in routines.
+    click(byId('act-add-ex'));
+    var tCard = await until(function () { return q('.ex-card[data-eid]'); }, 6000, 'template exercise card');
+    setVal(tCard.querySelector('.ex-name'), 'Bench');
+    click(await until(function () { return q('.sug[data-name="Bench Press"]'); }, 4000, 'bench suggestion'));
+    await sleep(80);
+    var tplSaved = false;
+    var tS0 = Date.now();
+    while (!tplSaved && Date.now() - tS0 < 6000) {
+      try {
+        var prow = await idbSetting('programs');
+        var fx = prow && prow.value
+          ? prow.value.filter(function (p) { return p.id === 'prog-fx'; })[0] : null;
+        tplSaved = !!fx && fx.routines.length === 1 && fx.routines[0].exercises.length === 1 &&
+          fx.routines[0].exercises[0].name === 'Bench Press';
+      } catch (e) {}
+      if (!tplSaved) await sleep(100);
+    }
+    B('program-tpl-edit-saved', tplSaved, 'template exercise stored in programs');
+
+    // Scheduling is explicit: the date sheet defaults to today and the
+    // created routine opens like any scheduled routine.
+    click(byId('act-tpl-schedule'));
+    await until(function () {
+      return byId('sheet-ok') && byId('sheet-input') && byId('sheet-input').type === 'date';
+    }, 6000, 'schedule date sheet');
+    B('program-tpl-date-sheet', byId('sheet-input').value === iso(0), byId('sheet-input').value);
+    click(byId('sheet-ok'));
+    await until(function () { return byId('act-start'); }, 8000, 'scheduled routine view');
+    B('program-tpl-schedule', txt(q('.topbar-title')) === 'Push A' && !!byId('act-start'),
+      'scheduled from template: ' + txt(q('.topbar-title')));
+
+    // #73: adding a second routine with the same name must keep both
+    // entries instead of replacing the first.
+    click(byId('act-more'));
+    await until(function () { return byId('sheet-addprog'); }, 6000, 'routine action sheet');
+    click(byId('sheet-addprog'));
+    click(await until(function () { return q('[data-pick="prog-fx"]'); }, 6000, 'program picker'));
+    await until(function () { return !byId('sheet'); }, 6000, 'picker closed');
+    await gotoHome();
+    click(await until(function () { return q('[data-prog="prog-fx"]'); }, 6000, 'program card again'));
+    var tplRows = await until(function () {
+      var rows = qa('.prog-tpl');
+      return rows.length >= 2 ? rows : null;
+    }, 6000, 'two same-name templates');
+    B('program-dup-names', tplRows.length === 2 &&
+      tplRows.every(function (r) { return txt(r).indexOf('Push A') !== -1; }),
+      tplRows.map(txt).join('|'));
+
     phase(12);
   }
 
@@ -902,6 +976,25 @@
       txt(mine).indexOf('Bench Press') !== -1 && txt(mine).indexOf('Overhead Press') !== -1,
       mine ? txt(mine).slice(0, 80) : 'Week Plan not listed');
 
+    // #87: the Routines/Muscles switch lives inside the date-range card,
+    // not on a full-width row of its own.
+    var modeSeg = q('.seg-week-mode');
+    B('week-toggle-inline', !!modeSeg && !!modeSeg.closest && modeSeg.closest('.week-nav') !== null,
+      'toggle not inside week-nav');
+
+    // #85/#86: the day header is a caps weekday plus ordinal date behind a
+    // rule, with no set count next to the date.
+    var todayHead = q('.week-day.today .week-day-head');
+    var todayNameEl = q('.week-day.today .week-day-name');
+    var headCS = todayHead ? D().defaultView.getComputedStyle(todayHead) : null;
+    var nameCS = todayNameEl ? D().defaultView.getComputedStyle(todayNameEl) : null;
+    B('week-day-header', !!todayHead && /^[^-]+-\d+(st|nd|rd|th)$/i.test(txt(todayHead)) &&
+      !!nameCS && nameCS.textTransform === 'uppercase' &&
+      !!headCS && parseFloat(headCS.borderBottomWidth) > 0,
+      todayHead ? txt(todayHead) : 'missing head');
+    B('week-day-no-sets', !!todayHead && !/\bsets?\b/i.test(txt(todayHead)),
+      todayHead ? txt(todayHead) : 'missing head');
+
     click(byId('act-back'));
     await until(function () { return byId('act-add-ex'); }, 6000, 'back to routine');
     B('week-back-to-routine', txt(q('.topbar-title')) === 'Week Plan',
@@ -924,6 +1017,20 @@
       shDot ? shDot.style.background : 'missing dot');
     B('week-total-card', !!q('.week-total') && txt(q('.week-total')).indexOf('this week') !== -1,
       q('.week-total') ? txt(q('.week-total')).slice(0, 60) : 'missing');
+
+    // #84: the weekly summary is horizontal bars - one per muscle, widths
+    // painted through the CSSOM, values summing to the week total.
+    var barRows = qa('.week-total .wk-bar-row');
+    var barSum = barRows.reduce(function (n, r) {
+      return n + (parseInt(txt(r.querySelector('.wk-bar-val')), 10) || 0);
+    }, 0);
+    var barTotal = parseInt(txt(q('.week-total-head')), 10) || -1;
+    B('week-muscle-bars', barRows.length >= 2 && barSum === barTotal,
+      'bars: ' + barRows.length + ', sum: ' + barSum + ', total: ' + barTotal);
+    var barFill = q('.week-total .wk-bar-fill');
+    B('week-bars-painted', !!barFill && /%$/.test(barFill.style.width || '') &&
+      !!barFill.style.background,
+      barFill ? (barFill.style.width + ' | ' + barFill.style.background) : 'missing fill');
 
     // Week navigation: forward is empty of today, This week restores it.
     var firstLabel = txt(byId('week-label'));

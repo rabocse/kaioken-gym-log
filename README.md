@@ -39,9 +39,10 @@ stays on your phone.
 - History grouped by month, a 7-day calendar strip on Home, and a Kaioken
   theme that runs cold and heats up with your last 7 days of training.
 - Week planner: a Monday-Sunday calendar of the week's routines (names +
-  exercises) with a Muscles mode that shows per-day and weekly direct
-  working-set counts per muscle - open it from Home or while editing a
-  routine, browse other weeks, and pin it to Home as a compact card.
+  exercises) with a Muscles mode that shows per-day direct working-set
+  counts per muscle and a weekly summary of horizontal muscle bars - open
+  it from Home or while editing a routine, browse other weeks, and pin it
+  to Home as a compact card.
 - Stats screen with eight time ranges (last week through all time):
   - Progression: top-set weight or total working reps, line or bars.
   - Muscles: a weighted nine-axis radar comparing the previous equal range.
@@ -55,7 +56,8 @@ stays on your phone.
 ### Programs, sharing, data
 
 - Programs group routine templates under one name, show the next workout and
-  a done/total chip for the week; tap a routine to schedule it for today.
+  a done/total chip for the week; tap a routine to edit its exercises, then
+  schedule it for any date - same-name routines are all kept.
 - Share a finished routine as a themed 1080×1350 image (top sets, PRs, volume)
   through the system share sheet, with Save image / Copy text fallbacks.
 - Rename, repeat or delete any workout; change a scheduled or active

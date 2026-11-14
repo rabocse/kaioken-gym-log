@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = '1.19.0';
+  const APP_VERSION = '1.20.0';
 
   /* ---------- session clock (#50) ---------- */
   // The wall clock can jump under an NTP correction or a timezone change,
@@ -235,10 +235,11 @@
   // Canonical catalog name for a typed value (case-insensitive exact match),
   // or null - exercise names are restricted to catalog entries, so typos
   // like "bice" can never be written to the log. Existing history keeps its
-  // saved names.
+  // saved names. Retired names (#88) resolve to their alias replacement.
   function catalogNameOf(v) {
     const n = String(v || '').trim().toLowerCase();
     if (!n) return null;
+    if (GYMLOG_EX_ALIASES[n]) return GYMLOG_EX_ALIASES[n];
     for (let i = 0; i < GYMLOG_EX_NAMES.length; i++) {
       if (GYMLOG_EX_NAMES[i].toLowerCase() === n) return GYMLOG_EX_NAMES[i];
     }
@@ -275,6 +276,10 @@
   /* ---------- state ---------- */
   let routines = [];
   let programs = []; // (#62) stored whole-array in the settings store
+  // The program routine being edited (#83): a routine-shaped draft wrapping
+  // the live template, never stored in IndexedDB and never listed on Home.
+  // Cleared by render() the moment the view moves elsewhere.
+  let tplEdit = null;
   let storagePersisted = null;
   let view = { name: 'home' }; // home | new | routine | program | settings | stats | week
   let timerInt = null;
@@ -467,7 +472,13 @@
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
   }
 
-  function getRoutine(id) { return routines.find((r) => r.id === id); }
+  // The program-routine draft resolves through the same lookup the routine
+  // view uses (#83); everything that iterates `routines` (Home, Week,
+  // charts, export) keeps ignoring it.
+  function getRoutine(id) {
+    if (tplEdit && tplEdit.id === id) return tplEdit;
+    return routines.find((r) => r.id === id);
+  }
 
   // A save queued for a routine that was deleted from memory meanwhile must
   // never be written back - the delete's store.del has already landed.
@@ -501,17 +512,22 @@
   }
 
   // Saves soon after typing stops, or immediately for structural changes.
+  // A program-routine draft routes the same debounce into the programs
+  // store (#83): the draft itself must never be persisted as a routine.
   function scheduleSave(r, immediate) {
     const pending = saveTimers.get(r.id);
     if (pending) clearTimeout(pending);
+    const write = r._template
+      ? () => savePrograms()
+      : () => persist(r);
     if (immediate) {
       saveTimers.delete(r.id);
-      persist(r);
+      write();
       return;
     }
     saveTimers.set(r.id, setTimeout(() => {
       saveTimers.delete(r.id);
-      persist(r);
+      write();
     }, 400));
   }
 
@@ -524,13 +540,17 @@
 
   // iOS can kill a backgrounded PWA without firing pending debounce timers:
   // flush queued saves the moment the app is hidden or closed, so the last
-  // edits survive instead of dying with the timer.
+  // edits survive instead of dying with the timer. A program-routine draft
+  // flushes into the programs store, not the routines store (#83).
   function flushPendingSaves() {
     saveTimers.forEach((t, id) => {
       clearTimeout(t);
       saveTimers.delete(id);
       const r = getRoutine(id);
-      if (r) persist(r);
+      if (r) {
+        if (r._template) savePrograms();
+        else persist(r);
+      }
     });
   }
   document.addEventListener('visibilitychange', () => {
@@ -582,6 +602,11 @@
       const c = GYMLOG_CAT_COLORS[el.dataset.cat];
       if (c) el.style.background = c;
     });
+    root.querySelectorAll('.wk-bar-fill[data-w]').forEach((el) => {
+      const c = GYMLOG_CAT_COLORS[el.dataset.cat];
+      if (c) el.style.background = c;
+      el.style.width = el.dataset.w + '%';
+    });
     root.querySelectorAll('.sw[data-swatch]').forEach((el) => {
       const t = THEMES[el.dataset.th];
       if (!t) return;
@@ -600,6 +625,10 @@
     closeSheet();
     syncHeat();
     harvestSettingsInputs();
+    // The program-routine draft lives only for its editor view (#83): any
+    // navigation elsewhere (in-app back, browser back, a toast-time render
+    // of another view) drops it, unsaved keystrokes included.
+    if (tplEdit && !(view.name === 'routine' && view.id === tplEdit.id)) tplEdit = null;
     switch (view.name) {
       case 'new': renderNew(); break;
       case 'routine': renderRoutine(); break;
@@ -878,11 +907,14 @@
     const sheet = document.createElement('div');
     sheet.id = 'sheet';
     sheet.setAttribute('role', 'dialog');
+    const isDate = opts.type === 'date';
     sheet.innerHTML =
       '<div class="sheet-title">' + esc(opts.title) + '</div>' +
       '<label class="field"><span>' + esc(opts.label || 'Name') + '</span>' +
-      '<input id="sheet-input" maxlength="60" autocomplete="off" value="' + esc(opts.value || '') + '">' +
-      '</label>' +
+      '<input id="sheet-input"' + (isDate
+        ? ' type="date" value="' + esc(opts.value || todayISO()) + '"'
+        : ' maxlength="60" autocomplete="off" value="' + esc(opts.value || '') + '"') +
+      '></label>' +
       '<button class="btn btn-block btn-primary" id="sheet-ok" type="button">' +
       esc(opts.okLabel || 'OK') + '</button>' +
       '<button class="btn btn-block btn-ghost" id="sheet-cancel" type="button">Cancel</button>';
@@ -900,7 +932,7 @@
       if (e.key === 'Enter') { e.preventDefault(); ok(); }
     });
     input.focus();
-    input.select();
+    if (!isDate) input.select();
   }
 
   function openAlertSheet(opts) {
@@ -1198,21 +1230,22 @@
     }));
   }
 
-  function upsertTemplate(p, tpl) {
-    const existing = p.routines.find((x) => x.name === tpl.name);
-    if (existing) existing.exercises = tpl.exercises;
-    else p.routines.push(tpl);
+  // Programs may hold several routines with the same name (#73): every add
+  // is a new entry with its own id, never a name-keyed replacement of an
+  // existing template.
+  function addTemplate(p, tpl) {
+    p.routines.push(tpl);
   }
 
-  // Materialize a template as today's scheduled routine. The routine is
-  // tagged with the program id so the home card can show "2/4 this week";
-  // Repeat-as-New copies stay untagged (they are manual copies).
-  function routineFromTemplate(p, t) {
+  // Materialize a template as a scheduled routine for the chosen date. The
+  // routine is tagged with the program id so the home card can show "2/4
+  // this week"; Repeat-as-New copies stay untagged (they are manual copies).
+  function routineFromTemplate(p, t, date) {
     const r = {
       id: uid(),
       programId: p.id,
       name: t.name,
-      date: todayISO(),
+      date: validDate(date) ? date : todayISO(),
       createdAt: Date.now(),
       startedAt: null,
       endedAt: null,
@@ -1321,8 +1354,50 @@
     });
   }
 
+  // Schedule a program routine for a chosen day (#83): a date prompt
+  // defaulting to today, never an implicit schedule. Shared by the
+  // template editor's action bar and the template action sheet.
+  function openTemplateScheduleSheet(p, t) {
+    openPromptSheet({
+      title: 'Schedule "' + t.name + '"',
+      label: 'Date',
+      type: 'date',
+      value: todayISO(),
+      okLabel: 'Schedule',
+      onOk: (v) => {
+        const date = String(v || '');
+        if (!validDate(date)) { toast('Pick a valid date'); return; }
+        const created = routineFromTemplate(p, t, date);
+        tplEdit = null;
+        toast('"' + t.name + '" scheduled for ' + fmtDate(date));
+        go('routine', { id: created.id });
+      },
+    });
+  }
+
+  // Open a program routine for editing (#83). The draft is routine-shaped
+  // so the whole routine editor works on it, but it shares the template's
+  // exercises array: every edit lands on the program itself, saved through
+  // the programs store. It is never written to the routines store.
+  function openTemplateEditor(p, t) {
+    tplEdit = {
+      id: 'tpl:' + t.id,
+      _program: p,
+      _template: t,
+      name: t.name,
+      date: todayISO(),
+      createdAt: t.createdAt || Date.now(),
+      startedAt: null,
+      endedAt: null,
+      status: 'scheduled',
+      exercises: t.exercises,
+    };
+    go('routine', { id: tplEdit.id });
+  }
+
   function openTemplateSheet(p, t) {
     const items = [
+      { id: 'sched', label: 'Schedule\u2026' },
       { id: 'up', label: 'Move up' },
       { id: 'down', label: 'Move down' },
       { id: 'ren', label: 'Rename' },
@@ -1333,7 +1408,9 @@
       items: items,
       onPick: (it) => {
         const idx = p.routines.indexOf(t);
-        if (it.id === 'up' && idx > 0) {
+        if (it.id === 'sched') {
+          openTemplateScheduleSheet(p, t);
+        } else if (it.id === 'up' && idx > 0) {
           p.routines.splice(idx, 1);
           p.routines.splice(idx - 1, 0, t);
           savePrograms();
@@ -1357,9 +1434,15 @@
             },
           });
         } else if (it.id === 'del') {
+          // Removing the template currently open in the editor must drop
+          // the draft too and land back on the program, not on a dead
+          // routine view.
+          const editing = tplEdit && tplEdit._template === t;
+          if (editing) { cancelPendingSave(tplEdit.id); tplEdit = null; }
           p.routines = p.routines.filter((x) => x.id !== t.id);
           savePrograms();
-          render();
+          if (editing) go('program', { id: p.id });
+          else render();
         }
       },
     });
@@ -1377,7 +1460,7 @@
       items: items,
       onPick: (it) => {
         const addTo = (p) => {
-          upsertTemplate(p, { id: uid(), name: r.name, exercises: copyExercises(r.exercises) });
+          addTemplate(p, { id: uid(), name: r.name, exercises: copyExercises(r.exercises) });
           savePrograms();
           render();
           toast('"' + r.name + '" added to ' + p.name);
@@ -1449,7 +1532,7 @@
       '</header>' +
       '<div class="card note">' +
       (p.routines.length
-        ? 'Tap a routine to schedule it for today. This week: <b>' +
+        ? 'Tap a routine to edit it, then Schedule it for the day you want. This week: <b>' +
           Math.min(done, p.routines.length) + '/' + p.routines.length + '</b>' +
           (next ? '. Next up: <b>' + esc(next.name) + '</b>' : '') + '.'
         : 'No routines in this program yet. Copy one in from an existing routine below.') +
@@ -1457,7 +1540,7 @@
       '<div class="section-label">Routines</div>' +
       (tplItems || '<div class="empty">Nothing here yet.</div>') +
       '<button class="btn btn-ghost btn-block" id="act-copy-routine" type="button">' + I.copy + '<span>Copy from Routine</span></button>' +
-      '<p class="hint">Long-press a routine to move it up or down, rename it or remove it. Starting one creates today’s scheduled workout - the timer starts when you tap Start Workout, like any routine.</p>' +
+      '<p class="hint">Long-press a routine to schedule it, move it up or down, rename it or remove it. Scheduling creates that day\u2019s workout - the timer starts when you tap Start Workout, like any routine.</p>' +
       '<div class="spacer"></div>';
 
     document.getElementById('act-back').onclick = () => go('home');
@@ -1466,11 +1549,7 @@
     $app.querySelectorAll('.prog-tpl').forEach((el) => {
       const t = p.routines.find((x) => x.id === el.dataset.tid);
       if (!t) return;
-      el.onclick = () => {
-        const r = routineFromTemplate(p, t);
-        toast('"' + t.name + '" scheduled for today');
-        go('routine', { id: r.id });
-      };
+      el.onclick = () => openTemplateEditor(p, t);
       attachLongPress(el, () => openTemplateSheet(p, t));
     });
     document.getElementById('act-copy-routine').onclick = () => {
@@ -1487,7 +1566,7 @@
         onPick: (it) => {
           const src = getRoutine(it.id);
           if (!src) return;
-          upsertTemplate(p, { id: uid(), name: src.name, exercises: copyExercises(src.exercises) });
+          addTemplate(p, { id: uid(), name: src.name, exercises: copyExercises(src.exercises) });
           savePrograms();
           render();
           toast('"' + src.name + '" added to ' + p.name);
@@ -2105,10 +2184,17 @@
       '</button>';
   }
 
+  // English ordinal suffix for the week planner's day headers (#86):
+  // 1st, 2nd, 3rd, 4th... 11th, 21st - the classic modulo chain.
+  function ordinal(n) {
+    const v = n % 100;
+    const sfx = ['th', 'st', 'nd', 'rd'];
+    return n + (sfx[(v - 20) % 10] || sfx[v] || sfx[0]);
+  }
+
   function weekDayHTML(day, today, mode) {
     const d = day.date;
     const isToday = day.iso === today;
-    const total = weekTotalSets(day.totals);
     let body;
     if (mode === 'summary') {
       const chips = weekMuscleChipsHTML(day.totals);
@@ -2120,12 +2206,14 @@
         ? day.routines.map((r) => weekRoutineHTML(r, today)).join('')
         : '<div class="empty-inline">Rest day</div>';
     }
+    // The day header is its own band above a horizontal rule: weekday in
+    // caps plus the ordinal date ("MONDAY - 9th"), no set count next to
+    // the date (#85, #86) - the weekly bars carry the counts instead.
     return '<div class="card week-day' + (isToday ? ' today' : '') + '">' +
       '<div class="week-day-head">' +
       '<span class="week-day-name">' + esc(d.toLocaleDateString(undefined, { weekday: 'long' })) + '</span>' +
-      '<span class="week-day-right">' + d.getDate() +
-      (total ? ' \u00b7 ' + total + (total === 1 ? ' set' : ' sets') : '') +
-      '</span>' +
+      '<span class="week-day-sep">-</span>' +
+      '<span class="week-day-date">' + esc(ordinal(d.getDate())) + '</span>' +
       '</div>' +
       '<div class="week-day-body">' + body + '</div>' +
       '</div>';
@@ -2152,19 +2240,19 @@
       '<div class="card week-nav">' +
       '<button type="button" class="cal-nav-btn" id="week-prev" aria-label="Previous week">' + I.chev + '</button>' +
       '<span class="week-nav-label" id="week-label">' + esc(weekRangeLabel(start)) + '</span>' +
+      '<div class="seg seg-week-mode" role="group" aria-label="Week view mode">' +
+      '<button type="button" class="' + (weekMode === 'detail' ? 'on' : '') + '" data-wm="detail">Routines</button>' +
+      '<button type="button" class="' + (weekMode === 'summary' ? 'on' : '') + '" data-wm="summary">Muscles</button>' +
+      '</div>' +
       '<button type="button" class="cal-nav-btn" id="week-next" aria-label="Next week">' + I.chev + '</button>' +
       '</div>' +
       (weekOffset !== 0
         ? '<button class="btn btn-ghost btn-block" id="week-today" type="button">This week</button>'
         : '') +
-      '<div class="seg seg-week-mode">' +
-      '<button type="button" class="' + (weekMode === 'detail' ? 'on' : '') + '" data-wm="detail">Routines</button>' +
-      '<button type="button" class="' + (weekMode === 'summary' ? 'on' : '') + '" data-wm="summary">Muscles</button>' +
-      '</div>' +
       (totalSets
         ? '<div class="card week-total">' +
           '<div class="week-total-head">' + totalSets + (totalSets === 1 ? ' set' : ' sets') + ' this week</div>' +
-          weekMuscleChipsHTML(totals) +
+          weekMuscleBarsHTML(totals, totalSets) +
           '</div>'
         : (anyRoutine ? '' :
           '<div class="card"><div class="empty">Nothing scheduled this week. Create a routine or schedule one from a program.</div></div>')) +
@@ -2594,9 +2682,9 @@
       unitSeg +
       moveBtns +
       (active ? delBtn : '') +
-      '<span class="ex-meta' + (primary ? ' has-wk' : '') + '">' +
+      '<span class="ex-meta' + (primary && weekTotals ? ' has-wk' : '') + '">' +
       '<span class="cat-tag">' + esc(gymlogCategoryOf(ex.name)) + '</span>' +
-      weekChipHTML(primary, weekN) +
+      (weekTotals ? weekChipHTML(primary, weekN) : '') +
       '</span>' +
       '</div>' +
       rows +
@@ -2825,8 +2913,12 @@
   function renderRoutine() {
     const r = getRoutine(view.id);
     if (!r) { view = { name: 'home' }; return renderHome(); }
-    const editable = r.status !== 'completed';
-    const activeView = r.status === 'active';
+    // A program-routine draft (#83) reuses the whole editor but has no
+    // date, status or workout lifecycle of its own: it edits the program
+    // template and ends with an explicit Schedule action.
+    const isTpl = !!r._template;
+    const editable = isTpl || r.status !== 'completed';
+    const activeView = !isTpl && r.status === 'active';
     // (Re)set the fold state when entering the routine or when the workout
     // starts: all folded by default, the user unfolds what they perform.
     if (activeView) {
@@ -2839,12 +2931,15 @@
       }
     }
     // Weekly muscle baseline from finished workouts in the routine's week,
-    // plus every planned/logged row in this routine.
-    const weekBase = weekDirectSets(routineDate(r));
-    const weekTotals = {};
-    GYMLOG_MUSCLE_AXES.forEach((m) => { weekTotals[m] = weekBase[m] || 0; });
-    const liveSets = routineDirectSets(r);
-    GYMLOG_MUSCLE_AXES.forEach((m) => { weekTotals[m] += liveSets[m] || 0; });
+    // plus every planned/logged row in this routine. A template is not part
+    // of any week yet, so its cards show no weekly chip.
+    const weekBase = isTpl ? null : weekDirectSets(routineDate(r));
+    const weekTotals = isTpl ? null : {};
+    if (weekTotals) {
+      GYMLOG_MUSCLE_AXES.forEach((m) => { weekTotals[m] = weekBase[m] || 0; });
+      const liveSets = routineDirectSets(r);
+      GYMLOG_MUSCLE_AXES.forEach((m) => { weekTotals[m] += liveSets[m] || 0; });
+    }
     const exCards = r.exercises.map((ex) =>
       exerciseCardHTML(ex, editable, activeView, editable && r.exercises.length > 1, weekTotals)).join('');
 
@@ -2852,15 +2947,25 @@
       '<header class="topbar">' +
       '<button class="btn btn-icon" id="act-back" aria-label="Back">' + I.back + '</button>' +
       '<h1 class="topbar-title">' + esc(r.name) + '</h1>' +
-      '<button class="btn btn-icon" id="act-week" aria-label="Week schedule">' + I.calendar + '</button>' +
+      (isTpl ? '' :
+        '<button class="btn btn-icon" id="act-week" aria-label="Week schedule">' + I.calendar + '</button>') +
       '<button class="btn btn-icon" id="act-more" aria-label="More actions">' + I.dots + '</button>' +
-      '<button class="btn btn-icon btn-danger" id="act-del" aria-label="Delete routine">' + I.trash + '</button>' +
+      (isTpl ? '' :
+        '<button class="btn btn-icon btn-danger" id="act-del" aria-label="Delete routine">' + I.trash + '</button>') +
       '</header>' +
-      (r.status === 'scheduled'
+      (isTpl
+        ? '<div class="card"><label class="field"><span>Name</span>' +
+          '<input id="in-tpl-name" maxlength="60" autocomplete="off" autocapitalize="words" value="' + esc(r.name) + '">' +
+          '</label>' +
+          '<p class="hint">This routine is part of the program. Edit it here, then tap Schedule Workout to create that day\u2019s routine.</p>' +
+          '</div>'
+        : '') +
+      (!isTpl && r.status === 'scheduled'
         ? '<label class="field rdate"><span>Date</span><input type="date" id="in-rdate" value="' + esc(r.date) + '"></label>'
         : '') +
-      (r.status === 'active' ? workoutStripHTML(r) : statusCardHTML(r)) +
-      (r.status === 'completed' && shareableRoutine(r)
+      (isTpl ? '' :
+        (r.status === 'active' ? workoutStripHTML(r) : statusCardHTML(r))) +
+      (!isTpl && r.status === 'completed' && shareableRoutine(r)
         ? '<button class="btn btn-primary btn-block" id="act-share" type="button">' + I.share +
           '<span>Share highlight</span></button>'
         : '') +
@@ -2874,7 +2979,10 @@
 
     let barHTML = '';
     let twoButtonBar = false;
-    if (r.status === 'scheduled') {
+    if (isTpl) {
+      barHTML = '<button class="btn btn-primary btn-block" id="act-tpl-schedule" type="button">' + I.play +
+        '<span>Schedule Workout</span></button>';
+    } else if (r.status === 'scheduled') {
       if (r.date > todayISO()) {
         twoButtonBar = true;
         barHTML = '<button class="btn btn-primary btn-block" id="act-save" type="button">Save Routine</button>' +
@@ -2894,9 +3002,39 @@
       if (twoButtonBar) document.body.classList.add('has-bar2');
     }
 
-    document.getElementById('act-back').onclick = () => go('home');
-    document.getElementById('act-week').onclick = () => openWeek();
-    document.getElementById('act-more').onclick = () => openSheet(r);
+    // Template editor (#83): back returns to the program, the sheet is the
+    // template's own, and the name field edits the template directly.
+    document.getElementById('act-back').onclick = () => {
+      if (isTpl) go('program', { id: r._program.id });
+      else go('home');
+    };
+    const weekBtn = document.getElementById('act-week');
+    if (weekBtn) weekBtn.onclick = () => openWeek();
+    document.getElementById('act-more').onclick = () => {
+      if (isTpl) openTemplateSheet(r._program, r._template);
+      else openSheet(r);
+    };
+    const tplNameEl = document.getElementById('in-tpl-name');
+    if (tplNameEl) {
+      tplNameEl.addEventListener('input', () => {
+        const nm = tplNameEl.value.slice(0, 60);
+        r.name = nm;
+        r._template.name = nm;
+        scheduleSave(r);
+        const title = $app.querySelector('.topbar-title');
+        if (title) title.textContent = nm || 'Routine';
+      });
+      tplNameEl.addEventListener('blur', () => {
+        // trim on blur, mirroring the rename sheet's normalization
+        const nm = tplNameEl.value.trim().slice(0, 60);
+        if (nm !== tplNameEl.value) { tplNameEl.value = nm; }
+        r.name = nm;
+        r._template.name = nm;
+        scheduleSave(r, true);
+      });
+    }
+    const tplSchedBtn = document.getElementById('act-tpl-schedule');
+    if (tplSchedBtn) tplSchedBtn.onclick = () => openTemplateScheduleSheet(r._program, r._template);
     const shareAct = document.getElementById('act-share');
     if (shareAct) shareAct.onclick = () => shareHighlight(r);
     const editMetrics = document.getElementById('act-edit-metrics');
@@ -2912,7 +3050,8 @@
         render();
       };
     }
-    document.getElementById('act-del').onclick = () => {
+    const delBtn = document.getElementById('act-del');
+    if (delBtn) delBtn.onclick = () => {
       openConfirmSheet({
         title: 'Delete routine',
         message: 'Delete this routine? This cannot be undone.',
@@ -3004,7 +3143,9 @@
 
     // Update the chip after a name change: the primary muscle or its weekly
     // count can change. Values typed into a set do not affect the count.
+    // Template drafts show no weekly chip (#83).
     const refreshWeekChips = () => {
+      if (isTpl) return;
       const live = routineDirectSets(r);
       const merged = {};
       GYMLOG_MUSCLE_AXES.forEach((m) => { merged[m] = (weekBase[m] || 0) + (live[m] || 0); });
@@ -3709,6 +3850,29 @@
       .map((m) => '<span class="wk-mus"><i class="wk-mus-dot" data-cat="' + esc(m) +
         '"></i>' + esc(m) + ' <b>' + fmtWeekSets(totals[m]) + '</b></span>')
       .join('');
+  }
+
+  // Weekly muscle summary as horizontal progression bars (#84): one row per
+  // trained muscle in axis order, each bar's width the muscle's share of
+  // the week's total direct working sets, colored per category and painted
+  // through the CSSOM (data-w + data-cat) like every generated style.
+  function weekMuscleBarsHTML(totals, totalSets) {
+    return GYMLOG_MUSCLE_AXES
+      .filter((m) => (totals[m] || 0) > 0)
+      .map((m) => {
+        const n = fmtWeekSets(totals[m]);
+        const pct = totalSets > 0
+          ? Math.round((totals[m] / totalSets) * 1000) / 10
+          : 0;
+        return '<div class="wk-bar-row" title="' + esc(m) + ': ' + n + ' of ' +
+          fmtWeekSets(totalSets) + ' direct working set' + (totalSets === 1 ? '' : 's') +
+          ' this week (' + pct + '%).' + '">' +
+          '<span class="wk-bar-name">' + esc(m) + '</span>' +
+          '<span class="wk-bar-track"><span class="wk-bar-fill" data-cat="' + esc(m) +
+          '" data-w="' + pct + '"></span></span>' +
+          '<span class="wk-bar-val">' + n + '</span>' +
+          '</div>';
+      }).join('');
   }
 
   function weekRangeLabel(start) {

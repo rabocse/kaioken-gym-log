@@ -8,6 +8,37 @@ bumped together on release: `APP_VERSION` (js/app.js, shown in Settings),
 so an HTTP-cached copy cannot pin a stale release; `npm run verify` fails
 if the three drift apart. Each release is tagged on main (`v1.1.0`, ...).
 
+## [1.20.0] - 2026-11-14
+
+### Added
+- Programs are editable (#83): tapping a routine inside a program opens it
+  as a template editor - its name and exercises change right on the
+  program, saved through the programs store - and scheduling is an
+  explicit Schedule Workout action with a date prompt defaulting to today
+  (or any other day). Nothing is scheduled implicitly anymore; a
+  long-press Schedule shortcut offers the same date prompt.
+- Week planner: the weekly muscle summary is a set of horizontal
+  progression bars (#84) - one per muscle in the radar's axis order, each
+  bar's width the muscle's share of the week's total direct working sets,
+  category-colored and CSP-painted; the bar values sum to the week total.
+
+### Changed
+- Week planner day cards split in two (#85, #86): the weekday renders in
+  caps plus its ordinal date ("MONDAY - 9th") in a header band above a
+  horizontal rule, and the per-day set count no longer sits next to the
+  date - the weekly bars carry the counts.
+- The Routines/Muscles switch lives inline in the week's date-range card
+  as a compact control instead of using a full-width row of its own (#87).
+
+### Fixed
+- The exercise catalog offers a single Chest-Supported Row Machine (#88);
+  the two retired duplicate names remain as hidden aliases so history
+  logged under them keeps its Back/Biceps classification, weights and
+  autocomplete canonicalization.
+- Adding a routine to a program never replaces an existing template that
+  happens to share its name (#73): programs can hold several routines
+  named "Arm Day", each with its own id, exercises and entries.
+
 ## [1.19.0] - 2026-11-08
 
 ### Added
